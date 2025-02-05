@@ -5,7 +5,7 @@ from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCar
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
-    list_display = ('username', 'email', 'role', 'school_name', 'profile_picture_preview')
+    list_display = ('username', 'email', 'role','mobile_number', 'school_name', 'profile_picture_preview')
     fieldsets = UserAdmin.fieldsets + (
         ('Additional Info', {'fields': ('role', 'school_name', 'fcm_token', 'profile_picture')}),
     )

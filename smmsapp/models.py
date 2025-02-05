@@ -3,7 +3,6 @@ from django.db import models
 import uuid
 import os
 
-# -------- profile path creation ------
 def user_profile_path(instance, filename):
     """Generate file path for profile picture"""
     ext = filename.split('.')[-1]
@@ -18,12 +17,20 @@ class CustomUser(AbstractUser):
         ('parent', 'Parent'),
         ('student', 'Student'),
     ]
+    GENDER_CHOICES = [
+        ('M', 'Male'),
+        ('F', 'Female'),
+    ]
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # UUID for better security
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='student')
+    middle_name = models.CharField(max_length=100, default="")
     school_name = models.CharField(max_length=255, null=True, blank=True)
+    class_room = models.CharField(max_length=255, null=True, blank=True)
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES, default='M')
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
     profile_picture = models.ImageField(upload_to=user_profile_path, null=True, blank=True)
+    mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
 
     def __str__(self):
         return f"{self.username} - {self.role}"
@@ -32,8 +39,7 @@ class CustomUser(AbstractUser):
 class RFIDCard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     card_number = models.CharField(max_length=50, unique=True)
-    qrcode_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
-    student = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={'customuser__role': 'student'})
+    student = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
     control_number = models.CharField(max_length=50, unique=True)
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     is_active = models.BooleanField(default=True)
@@ -54,7 +60,7 @@ class BankDeposit(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     control_number = models.ForeignKey(RFIDCard, on_delete=models.CASCADE, to_field='control_number')
-    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'costomuser__role': 'student'})
+    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     transaction_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
@@ -67,15 +73,15 @@ class BankDeposit(models.Model):
     
 # ------ PARENT_STUDENT TABLE -------- 
 class ParentStudent(models.Model):
-    parent = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="children", limit_choices_to={'customuser__role': 'parent'})
-    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="parents", limit_choices_to={'customuser__role': 'student'})
+    parent = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="children", limit_choices_to={'role': 'parent'})
+    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="parents", limit_choices_to={'role': 'student'})
 
     class Meta:
         unique_together = ('parent', 'student')
 
     def __str__(self):
         return f"Parent: {self.parent.username} - Student: {self.student.username}"
-    
+
 # ------ CANTEEN ITEM TABLE ---------
 class CanteenItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -96,7 +102,7 @@ class Transaction(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'customuser__role': 'student'})
+    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
     rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
     item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -105,7 +111,7 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.student.username} - {self.item.name} - ${self.amount}"
-    
+
 # ----- NOTIFICATION TABLE ------
 class Notification(models.Model):
     STATUS_CHOICES = [
@@ -115,7 +121,7 @@ class Notification(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    parent = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'customuser__role': 'parent'})
+    parent = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'parent'})
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE)
     message = models.TextField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
@@ -124,7 +130,30 @@ class Notification(models.Model):
     def __str__(self):
         return f"Notification for {self.parent.username}: {self.status}"
 
+# ----- SCAN SESSION TABLE ------
+class ScanSession(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operator = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'operator'})
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"Session {self.id} - {self.status}"
 
+# SCANNED DATA TABLE
+class ScannedData(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(ScanSession, on_delete=models.CASCADE)  # Links to active session
+    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
+    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
+    scanned_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"{self.student.username} scanned at {self.scanned_at}"

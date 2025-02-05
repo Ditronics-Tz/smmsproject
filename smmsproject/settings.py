@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -36,7 +37,7 @@ CORS_ALLOWED_ORIGINS = [
     # "https://yourfrontend.com",  # Add production frontend domain
 ]
 
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication credentials
 
@@ -139,6 +140,17 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20
+}
+
+# ---- ACCESS AND REFRESH TOKEN -----
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),  # Increase access token to 15 min
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),  # Increase refresh token to 7 days
+    "ROTATE_REFRESH_TOKENS": True,  # Issue a new refresh token on refresh
+    "BLACKLIST_AFTER_ROTATION": True,  # Blacklist old refresh tokens
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # Internationalization
@@ -158,7 +170,7 @@ USE_TZ = True
 
 # STATIC_URL = 'static/'
 
-MEDIA_URL="/media/"
+MEDIA_URL="/uploads/"
 MEDIA_ROOT=os.path.join(BASE_DIR,"uploads")
 
 STATIC_URL="/static/"

@@ -21,7 +21,8 @@ from . import settings
 
 urlpatterns = [
     path('admin-auth/', admin.site.urls),
-    path('',include('smmsapp.urls')),
-    path('auth/', include('smmsapp.authUrls')),
+    path('',include('smmsapp.urls.adminUrls')),
+    path('auth/', include('smmsapp.urls.authUrls')),
     path('api-auth/', include('rest_framework.urls')),
+    path('resources/', include("smmsapp.urls.resourceUrls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
