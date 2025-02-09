@@ -25,6 +25,13 @@ class CustomUser(AbstractUser):
         ('parent', 'Parent'),
         ('student', 'Student'),
     ]
+
+    PARENT_TYPE_CHOICES = [
+        ('mother', 'Mother'),
+        ('father','Father'),
+        ('guardian', 'Guardian')
+    ]
+
     GENDER_CHOICES = [
         ('M', 'Male'),
         ('F', 'Female'),
@@ -36,6 +43,7 @@ class CustomUser(AbstractUser):
     school = models.ForeignKey(School, on_delete=models.SET_NULL, null=True, blank=True)
     class_room = models.CharField(max_length=255, null=True, blank=True)
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, default='M')
+    parent_type = models.CharField(max_length=10, choices=PARENT_TYPE_CHOICES, default='mother', null=True, blank=True)
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
     profile_picture = models.ImageField(upload_to=user_profile_path, null=True, blank=True)
     mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True)

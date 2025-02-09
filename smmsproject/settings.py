@@ -146,8 +146,8 @@ REST_FRAMEWORK = {
 
 # ---- ACCESS AND REFRESH TOKEN -----
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),  # Increase access token to 15 min
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),  # Increase refresh token to 7 days
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),  # access token to 15 min
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),  # refresh token to 1 days
     "ROTATE_REFRESH_TOKENS": True,  # Issue a new refresh token on refresh
     "BLACKLIST_AFTER_ROTATION": True,  # Blacklist old refresh tokens
     "AUTH_HEADER_TYPES": ("Bearer",),

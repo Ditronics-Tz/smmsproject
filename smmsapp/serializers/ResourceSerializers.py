@@ -13,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
     school = serializers.CharField(source='school.name',read_only=True)
     class Meta: 
         model = CustomUser
-        fields = ['id','first_name','middle_name', 'last_name','username','gender','email','mobile_number','class_room','school','profile_picture','date_joined']
+        fields = ['id','first_name','middle_name', 'last_name','username','parent_type','gender','email','mobile_number','class_room','school','profile_picture','date_joined']
 
 # ------ RFID Card INFO -----
 class RFIDCardSerializer(serializers.ModelSerializer):
@@ -33,7 +33,7 @@ class ParentSerializer(serializers.ModelSerializer):
     # school = SchoolSerializer(read_only = True)
     class Meta: 
         model = CustomUser
-        fields = ['id', 'first_name', 'last_name', 'email', 'mobile_number', 'gender']
+        fields = ['id', 'first_name', 'last_name','parent_type', 'email', 'mobile_number', 'gender']
 
 # ----- TRANSACTION INFO ------
 class TransactionSerializer(serializers.ModelSerializer):
@@ -75,7 +75,7 @@ class FullParentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['id','first_name', 'username','middle_name',  'last_name','email', 'mobile_number','gender',
+        fields = ['id','first_name', 'username','middle_name',  'last_name', 'parent_type','email', 'mobile_number','gender',
                   'school', 'students']
         
     def get_students(self, obj):
@@ -91,9 +91,20 @@ class FullOperatorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['id','first_name','middle_name',  'last_name','username','email', 'mobile_number','gender',
+        fields = ['id','first_name','middle_name', 'last_name','username','email', 'mobile_number','gender',
                   'school', 'sessions','school_id']
         
     def get_sessions(self, obj):
         sessions = ScanSession.objects.filter(operator=obj).select_related('operator')
         return ScanSessionSerializer([session.session for session in sessions],many=True).data
+    
+
+# ----- FULL ADMIN DETAILS ------
+class FullAdminSerializer(serializers.ModelSerializer):
+    school = serializers.CharField(source='school.name', read_only=True)
+    school_id = serializers.CharField(source='school.id', read_only=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ['id','first_name','middle_name',  'last_name','username','email', 'mobile_number','gender',
+                  'school','school_id']

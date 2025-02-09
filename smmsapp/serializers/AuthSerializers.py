@@ -50,7 +50,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['id', 'first_name','middle_name', 'last_name', 'username', 'email', 'mobile_number', 'role', 
-                  'school','class_room', 'gender', 'password','profile_picture']
+                  'school','class_room', 'gender', 'password','profile_picture','parent_type']
 
     # Generate control number automatic
     # def generate_control_number(self):

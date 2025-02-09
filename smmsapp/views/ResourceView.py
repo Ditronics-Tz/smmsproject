@@ -4,21 +4,12 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated
+from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated, IsAdminUser
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from ..serializers.ResourceSerializers import FullStudentSerializer, UserSerializer, FullParentSerializer, FullOperatorSerializer, SchoolSerializer
+from ..serializers.ResourceSerializers import FullStudentSerializer, UserSerializer, FullParentSerializer, FullOperatorSerializer, SchoolSerializer, FullAdminSerializer
 from ..models import CustomUser as User, School
 from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly
-
-# ----- API FOR SHORT SCHOOL LIST ----
-# class SchoolListView(APIView):
-#     permission_classes = [IsAuthenticated]  # Only authenticated users can access
-
-#     def post(self, request, *args, **kwargs):
-#         schools = School.objects.all().order_by("name")
-#         serializer = SchoolSerializer(schools, many=True)
-#         return Response(serializer.data)
 
 # ----- API FOR GET SCHOOL -----
 class SchoolListView(APIView, PageNumberPagination):
@@ -59,7 +50,7 @@ class UserListView(APIView, PageNumberPagination):
     def post(self, request, *args, **kwargs):
         search_query = request.data.get("search").strip()
         role = request.data.get("role")
-        users = User.objects.filter(role=role).order_by("first_name")  # Filter by role
+        users = User.objects.filter(role=role).exclude(id=request.user.id).order_by("first_name")  # Filter by role
 
         if search_query:
             users = users.filter(
@@ -165,4 +156,27 @@ class OperatorDetailView(generics.RetrieveAPIView):
         serializer = FullOperatorSerializer(operator)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class AdminDetailsView(generics.RetrieveAPIView):
+    queryset = User.objects.filter(role='admin')
+    serializer_class = FullAdminSerializer
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, *args, **kwags):
+        if not request.user.is_authenticated or request.user.role != 'admin':
+            return Response({
+                "code": 403,
+                "messsage": "Access denied!, Only super admin can view admins details"
+            },status=status.HTTP_403_FORBIDDEN)
+        
+        admin_id = request.data.get('admin_id')
+        
+        if not admin_id:
+            return Response({"code": 104, "message": "Admin ID required"},status=status.HTTP_400_BAD_REQUEST)
+        
+        admin = get_object_or_404(User, id=admin_id, role= 'admin')
+        serializer  = FullAdminSerializer(admin)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 

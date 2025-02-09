@@ -7,6 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q
 from ..serializers.AuthSerializers import UserCreateSerializer, AuthUserSerializer, LoginSerializer
 from ..models import CustomUser as User, RFIDCard
+from ..permissions.CustomPermissions import IsAdminOnly, IsAdminOrParent
 
 # Generate JWT tokens for user
 def get_tokens_for_user(user):
@@ -65,7 +66,7 @@ class LogoutView(APIView):
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
-    permission_classes = [IsAuthenticated]  # Only admins can create users
+    permission_classes = [IsAdminOnly]  # Only admins can create users
 
     def post(self, request, *args, **kwargs):
         try:
@@ -96,7 +97,7 @@ class CreateUserView(generics.CreateAPIView):
 class EditUserView(generics.UpdateAPIView):
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOnly]
 
     def post(self, request, *args, **kwargs):
         # Extract `user_id` from request data
