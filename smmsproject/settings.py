@@ -100,13 +100,25 @@ WSGI_APPLICATION = 'smmsproject.wsgi.application'
 #     }
 # }
 
-# ----- POSTGRESS ------
+# ----- DATABASE LOCAL ------
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'smmsDB',
+#         'USER': 'postgres',
+#         'PASSWORD': '1234',
+#         'HOST': '127.0.0.1',
+#         'PORT': '5433',
+#     }
+# }
+
+# ----- DATABASE PRODUCTION -----
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'smmsDB',
         'USER': 'postgres',
-        'PASSWORD': '1234',
+        'PASSWORD': '123456789',
         'HOST': '127.0.0.1',
         'PORT': '5433',
     }
