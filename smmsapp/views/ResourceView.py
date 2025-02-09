@@ -7,24 +7,74 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from ..serializers.ResourceSerializers import FullStudentSerializer, StudentSerializer
-from ..models import CustomUser as User
-from ..permissions.CustomPermissions import IsAdminOrParent
+from ..serializers.ResourceSerializers import FullStudentSerializer, UserSerializer, FullParentSerializer, FullOperatorSerializer, SchoolSerializer
+from ..models import CustomUser as User, School
+from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly
 
-# ----- API FOR GET STUDENT LIST -----
-class StudentListView(APIView, PageNumberPagination):
-    permission_classes = [IsAuthenticated]  # ✅ Requires authentication
+# ----- API FOR SHORT SCHOOL LIST ----
+# class SchoolListView(APIView):
+#     permission_classes = [IsAuthenticated]  # Only authenticated users can access
+
+#     def post(self, request, *args, **kwargs):
+#         schools = School.objects.all().order_by("name")
+#         serializer = SchoolSerializer(schools, many=True)
+#         return Response(serializer.data)
+
+# ----- API FOR GET SCHOOL -----
+class SchoolListView(APIView, PageNumberPagination):
+    permission_classes = [IsAuthenticated]
+    page_size = 20
 
     def post(self, request, *args, **kwargs):
         search_query = request.data.get("search").strip()
-        students = User.objects.filter(role='student')  # ✅ Filter by role
+        school = School.objects.all().order_by('name')
 
         if search_query:
-            students = students.filter(first_name__icontains=search_query)
+            school = school.filter(
+                Q(name__icontains=search_query) | Q(location__icontains=search_query)
+            )
         
-        result = self.paginate_queryset(students, request, view=self)
-        serializer = StudentSerializer(students, many=True)
-        return self.get_paginated_response(serializer.data)
+        # Apply pagination
+        result = self.paginate_queryset(school, request, view=self)
+        if result is not None:
+            serializer =SchoolSerializer(result, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        # If fail return all data/fields
+        serializer = UserSerializer(school, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+# ----- API TO ADD SCHOOL ----
+class CreateSchoolView(generics.CreateAPIView):
+    queryset = School.objects.all()
+    serializer_class = SchoolSerializer
+    permission_classes = [IsAuthenticated]
+
+
+# ----- API FOR GET STUDENT LIST -----
+class UserListView(APIView, PageNumberPagination):
+    permission_classes = [IsAuthenticated]  #Requires authentication
+    page_size = 50 
+
+    def post(self, request, *args, **kwargs):
+        search_query = request.data.get("search").strip()
+        role = request.data.get("role")
+        users = User.objects.filter(role=role).order_by("first_name")  # Filter by role
+
+        if search_query:
+            users = users.filter(
+                Q(first_name__icontains=search_query) | Q(last_name__icontains=search_query) | Q(middle_name__icontains=search_query)
+            )
+        
+        # Apply pagination
+        result = self.paginate_queryset(users, request, view=self)
+        if result is not None:
+            serializer =UserSerializer(result, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        # If fail return all data/fields
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
 
 # ----- API FOR FETCH STUDENT DATA -----
@@ -56,4 +106,63 @@ class StudentDetailView(generics.RetrieveAPIView):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+# ----- API FOR FETCH PARENT DATA -----
+class ParentDetailView(generics.RetrieveAPIView):
+    queryset = User.objects.filter(role='parent')
+    serializer_class = FullParentSerializer,
+    permission_class = [IsAdminOnly]
+
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_authenticated or request.user.role != 'admin':
+            return Response(
+                {
+                    "code": 403,
+                    "message": "Access denied. Only admins can view parents details"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        parent_id = request.data.get("parent_id")
+
+        if not parent_id:
+            return Response({
+                "code": 104,
+                "message": "Parent id required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        parent = get_object_or_404(User, id=parent_id, role = 'parent')
+        serializer = FullParentSerializer(parent)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ----- API FOR FETCH OPERATORS DATA -----
+class OperatorDetailView(generics.RetrieveAPIView):
+    queryset = User.objects.filter(role='operator')
+    serializer_class = FullOperatorSerializer,
+    permission_class = [IsAdminOnly]
+
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_authenticated or request.user.role != 'admin':
+            return Response(
+                {
+                    "code": 403,
+                    "message": "Access denied. Only admins can view operator details"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        operator_id = request.data.get("operator_id")
+
+        if not operator_id:
+            return Response({
+                "code": 104,
+                "message": "Parent id required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        operator = get_object_or_404(User, id=operator_id, role = 'operator')
+        serializer = FullOperatorSerializer(operator)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 

@@ -7,3 +7,9 @@ class IsAdminOrParent(BasePermission):
         if request.user.is_authenticated and request.user.role in ['admin','parent']:
             return True
         return False
+    
+class IsAdminOnly(BasePermission):
+    def has_permission(self, request, view):
+        if request.user.is_authenticated and request.user.role == 'admin':
+            return True
+        return False

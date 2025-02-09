@@ -1,13 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
-from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification, CanteenItem
+from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification, CanteenItem, ScanSession, ScannedData, School
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
-    list_display = ('username', 'email', 'role','mobile_number', 'school_name', 'profile_picture_preview')
+    list_display = ('first_name', 'last_name', 'email','role','mobile_number', 'profile_picture_preview')
     fieldsets = UserAdmin.fieldsets + (
-        ('Additional Info', {'fields': ('role', 'school_name', 'fcm_token', 'profile_picture')}),
+        ('Additional Info', {'fields': ('middle_name', 'role', 'school', 'fcm_token', 'profile_picture', 'gender', 'mobile_number')}),
     )
 
     def profile_picture_preview(self, obj):
@@ -23,5 +23,8 @@ admin.site.register(Transaction),
 admin.site.register(ParentStudent),
 admin.site.register(RFIDCard),
 admin.site.register(Notification),
-admin.site.register(CanteenItem)
+admin.site.register(CanteenItem),
+admin.site.register(ScannedData),
+admin.site.register(ScanSession),
+admin.site.register(School)
 

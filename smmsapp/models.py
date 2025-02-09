@@ -3,11 +3,19 @@ from django.db import models
 import uuid
 import os
 
+# --- function to save profile image
 def user_profile_path(instance, filename):
     """Generate file path for profile picture"""
     ext = filename.split('.')[-1]
     filename = f"profile_pics/{instance.id}.{ext}"
     return os.path.join('uploads/', filename)
+
+# ------ SCHOOL TABLE ------
+class School(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, unique=True)
+    location = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 # -------- USER TABLE ----------
 class CustomUser(AbstractUser):
@@ -25,7 +33,7 @@ class CustomUser(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='student')
     middle_name = models.CharField(max_length=100, default="")
-    school_name = models.CharField(max_length=255, null=True, blank=True)
+    school = models.ForeignKey(School, on_delete=models.SET_NULL, null=True, blank=True)
     class_room = models.CharField(max_length=255, null=True, blank=True)
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, default='M')
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
@@ -33,7 +41,8 @@ class CustomUser(AbstractUser):
     mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
 
     def __str__(self):
-        return f"{self.username} - {self.role}"
+        return f"{self.first_name} {self.last_name} - {self.role}"
+    
 
 # ------ RFID_CARD TABLE ---------
 class RFIDCard(models.Model):
@@ -120,15 +129,24 @@ class Notification(models.Model):
         ('failed', 'Failed'),
     ]
 
+    TYPE_CHOICES = [
+        ('transaction', 'Transaction'),
+        ('system', 'System Update'),
+        ('reminder', 'Reminder'),
+        ('message', 'Message'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    parent = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'parent'})
-    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE)
+    recipient = models.ForeignKey(CustomUser, on_delete=models.CASCADE)  # Allow all users, not just parents
+    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, null=True, blank=True)  # Optional
     message = models.TextField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    type = models.CharField(max_length=15, choices=TYPE_CHOICES, default='message')  # Type of notification
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Notification for {self.parent.username}: {self.status}"
+        return f"Notification for {self.recipient.first_name}: {self.type} - {self.status}"
+
 
 # ----- SCAN SESSION TABLE ------
 class ScanSession(models.Model):
@@ -138,16 +156,24 @@ class ScanSession(models.Model):
         ('cancelled', 'Cancelled'),
     ]
 
+    SESSION_TYPE_CHOICES = [
+        ('breakfast', 'Breakfast'),
+        ('lunch', 'Lunch'),
+        ('dinner','Dinner')
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     operator = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'operator'})
+    type = models.CharField(max_length=50, choices=SESSION_TYPE_CHOICES, default='breakfast')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
-    created_at = models.DateTimeField(auto_now_add=True)
+    start_at = models.DateTimeField(auto_now_add=True)
+    end_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Session {self.id} - {self.status}"
+        return f"Session {self.type} - {self.status}"
 
-# SCANNED DATA TABLE
+# ---- SCANNED DATA TABLE -----
 class ScannedData(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(ScanSession, on_delete=models.CASCADE)  # Links to active session
