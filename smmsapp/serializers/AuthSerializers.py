@@ -6,7 +6,7 @@ from rest_framework.response import Response
 import random
 import string
 from datetime import datetime
-from ..models import CustomUser, RFIDCard, Notification
+from ..models import CustomUser, RFIDCard, Notification, ParentStudent
 from .ResourceSerializers import SchoolSerializer
 
 # ----- USER SERIALIZER-----
@@ -40,25 +40,22 @@ class LoginSerializer(serializers.Serializer):
 class UserCreateSerializer(serializers.ModelSerializer):
     username = serializers.CharField(write_only=True, required=False)
     role = serializers.ChoiceField(choices=CustomUser.ROLE_CHOICES)  # Allow role selection
-    # control_number = serializers.CharField(write_only=True, required=False)  # Only needed for students
     password = serializers.CharField(write_only=True, required=False)  # Optional for students
     middle_name = serializers.CharField(write_only=True, required=False)  # Optional for middle name
     gender = serializers.ChoiceField(choices=CustomUser.GENDER_CHOICES, required=False)  # Gender choices
     profile_picture = serializers.ImageField(write_only=True, required=False)
-    # card_number = serializers.CharField(write_only=True, required=False) # Only needed for student 
+
+   # Accept multiple parent IDs when creating a student
+    parent_ids = serializers.ListField( child=serializers.UUIDField(), write_only=True, required=False)
+    
+    # Accept multiple student IDs when creating a parent
+    student_ids = serializers.ListField(child=serializers.UUIDField(), write_only=True, required=False)
 
     class Meta:
         model = CustomUser
         fields = ['id', 'first_name','middle_name', 'last_name', 'username', 'email', 'mobile_number', 'role', 
-                  'school','class_room', 'gender', 'password','profile_picture','parent_type']
-
-    # Generate control number automatic
-    # def generate_control_number(self):
-    #     # Generate control number in the format STU{year}{random6digit}
-    #     year = datetime.now().year
-    #     month = datetime.now().month
-    #     random6digit = random.randint(100000, 999999)
-    #     return f"STU{year}{month}{random6digit}"
+                  'school','class_room', 'gender', 'password','profile_picture','parent_type',
+                  'parent_ids', 'student_ids']
 
     # Generate strong password
     def generate_password(self):
@@ -91,20 +88,14 @@ class UserCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"code": 108, "message": "This user is already exist"})
         return username
     
-    # # Validate card number
-    # def validate_card_number(self, value):
-    #     if RFIDCard.objects.filter(card_number = value).exists():
-    #         raise serializers.ValidationError({"code": 105, "message": "This card already exist"})
-    #     return value
-    
     # Create user
     def create(self, validated_data):
         role = validated_data.pop('role')
+        student_ids = validated_data.pop('student_ids', [])
+        parent_ids = validated_data.pop('parent_ids', [])
         user = None 
 
         if role == 'student':
-            # card_number = validated_data.pop('card_number','')
-            
             # Generate username from first name and last name
             first_name = validated_data.get('first_name', '').strip()
             last_name = validated_data.get('last_name', '').strip()
@@ -120,9 +111,15 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
             user = CustomUser.objects.create(role=role, **validated_data)
             user.save()
+
+            # If `parent_id` is provided, link parent to student
+            for parent_id in parent_ids:
+                try:
+                    parent = CustomUser.objects.get(id=parent_id, role='parent')
+                    ParentStudent.objects.get_or_create(parent=parent, student=user)
+                except CustomUser.DoesNotExist:
+                    raise serializers.ValidationError({"code": 107, "message": "Invalid parent ID"})
             
-            # control_number = self.generate_control_number()
-            # RFIDCard.objects.create(student=user, control_number=control_number, card_number=card_number, balance=0.0, is_active=False)
         else:
             password = self.generate_password()
             validated_data['password'] = password # password
@@ -130,6 +127,14 @@ class UserCreateSerializer(serializers.ModelSerializer):
             user = CustomUser.objects.create(role=role, **validated_data)
             user.set_password(password)  # ✅ Hash password
             user.save()
+
+            # If `student_id` is provided, link student to parent
+            for student_id in student_ids:
+                try:
+                    student = CustomUser.objects.get(id=student_id, role='student')
+                    ParentStudent.objects.get_or_create(parent=user, student=student)
+                except CustomUser.DoesNotExist:
+                    raise serializers.ValidationError({"code": 107, "message": "Invalid student ID"})
 
             message = f"Hello {user.first_name}, your account was created successfully. Use username {user.username} and password {password}."
             Notification.objects.create(recipient=user, type='reminder', message=message)

@@ -25,4 +25,5 @@ urlpatterns = [
     path('auth/', include('smmsapp.urls.authUrls')),
     path('api-auth/', include('rest_framework.urls')),
     path('resources/', include("smmsapp.urls.resourceUrls")),
+    path('list/',include("smmsapp.urls.listUrls"))
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -17,6 +17,7 @@ def get_tokens_for_user(user):
         'token': str(refresh.access_token),
     }
 
+
 # User Login API (Supports Username or Mobile)
 class LoginView(APIView):
     serializer_class = LoginSerializer
@@ -48,6 +49,7 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+
 # User Logout API (Blacklist Token)
 class LogoutView(APIView):
     permission_classes = [AllowAny]
@@ -61,7 +63,8 @@ class LogoutView(APIView):
             return Response({"message": "Logged out successfully"}, status=status.HTTP_205_RESET_CONTENT)
         except Exception as e:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
-        
+
+
 # User Creations API
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -93,6 +96,7 @@ class CreateUserView(generics.CreateAPIView):
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
 
+
 # User Edit API
 class EditUserView(generics.UpdateAPIView):
     queryset = User.objects.all()
@@ -118,17 +122,6 @@ class EditUserView(generics.UpdateAPIView):
         serializer = self.get_serializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
-        # # Ensure `card_number` is unique if updating a student
-        # if 'card_number' in serializer.validated_data:
-        #     card_number = serializer.validated_data['card_number']
-        #     if RFIDCard.objects.filter(card_number=card_number).exclude(student=user).exists():
-        #         return Response({"code": 105, "message": "This card number is already registered."}, status=status.HTTP_400_BAD_REQUEST)
-
-        #     # Update or create RFID card for the student
-        #     rfid_card, created = RFIDCard.objects.get_or_create(student=user)
-        #     rfid_card.card_number = card_number
-        #     rfid_card.save()
-
         # Ensure students don’t require passwords
         if user.role == 'student':
             serializer.validated_data.pop('password', None)
@@ -136,3 +129,42 @@ class EditUserView(generics.UpdateAPIView):
         serializer.save()
         return Response({"message": "User updated successfully", "user": serializer.data}, status=status.HTTP_200_OK)
 
+
+# API FOR ACTIVATE AND DEACTIVATE USER
+class ActivateDeactivateUserView(APIView):
+    permission_classes = [IsAdminOnly]
+
+    def post(self, request, *args, **kwargs):
+        try:
+            # Only Admins can update any user
+            if request.user.role != 'admin':
+                return Response({"code": 403, "message": "Only admins can update users"}, status=status.HTTP_403_FORBIDDEN)
+
+
+            # Get card ID from request body
+            user_id = request.data.get("user_id")
+            if not user_id:
+                return Response({"code" : 106, "message": "User ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if card exists
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({"code": 404, "message": "Card not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # Toggle is_active based on request data
+            action = request.data.get("action")  # Expected values: "activate" or "deactivate"
+            if action == "activate":
+                user.is_active = True
+                message = "User is activated successful."
+            elif action == "deactivate":
+                user.is_active = False
+                message = "User isdeactivated successfully."
+            else:
+                return Response({"code": 111, "message": "Invalid action. Use 'activate' or 'deactivate'."}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.save()
+            return Response({"message": message, "card_id": user_id, "is_active": user.is_active}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"code": 500, "message": f"General System error - {e}"})

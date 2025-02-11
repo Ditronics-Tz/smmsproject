@@ -34,13 +34,12 @@ ALLOWED_HOSTS = ['*']
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3005",
-    # "https://yourfrontend.com",  # Add production frontend domain
+    "http://ditronics.co.tz:8000"
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication credentials
-
 
 
 # Application definition
@@ -90,39 +89,29 @@ TEMPLATES = [
 WSGI_APPLICATION = 'smmsproject.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-# ----- SQLITE3 -----
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
 # ----- DATABASE LOCAL ------
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'smmsDB',
-#         'USER': 'postgres',
-#         'PASSWORD': '1234',
-#         'HOST': '127.0.0.1',
-#         'PORT': '5433',
-#     }
-# }
-
-# ----- DATABASE PRODUCTION -----
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'smmsDB',
         'USER': 'postgres',
-        'PASSWORD': '123456789',
+        'PASSWORD': '1234',
         'HOST': '127.0.0.1',
         'PORT': '5433',
     }
 }
+
+# ----- DATABASE PRODUCTION -----
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'smmsdb',
+#         'USER': 'postgres',
+#         'PASSWORD': '123456789',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
 
 
 # Password validation
