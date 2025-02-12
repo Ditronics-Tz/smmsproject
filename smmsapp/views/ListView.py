@@ -14,29 +14,34 @@ from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly
 # --- api to return all active parent
 class AllParentListView(generics.ListAPIView):
     queryset = CustomUser.objects.filter(role="parent", is_active=True)
-    serializer_class = UserSerializer
+    serializer_class = ParentSerializer
     permission_classes = [IsAuthenticated]
+    page_size = None
 
 #  --- api to return all active students 
 class AllStudentListView(generics.ListAPIView):
     queryset = CustomUser.objects.filter(role='student', is_active=True)
-    serializer_class = UserSerializer
+    serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
+    page_size = None
 
 # --- api to return all cards active
 class AllCardListView(generics.ListAPIView):
     queryset = RFIDCard.objects.filter(is_active=True)
     serializer_class = RFIDCardSerializer
     permission_classes = [IsAuthenticated]
+    page_size = None
 
 # --- api to return all school list
 class AllSchoooListView(generics.ListAPIView):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
     permission_classes = [IsAuthenticated]
+    page_size = None
 
 # --- api to return all items
 class AllCanteenItemView(generics.ListAPIView):
     queryset = CanteenItem.objects.all()
     serializer_class = CanteenItem
     permission_classes = [IsAuthenticated]
+    page_size = None

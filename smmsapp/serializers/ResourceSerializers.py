@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from ..models import CustomUser, RFIDCard, ParentStudent, Transaction, ScanSession, School, CanteenItem, ScannedData
 from django.db.models import Q
-import datetime
+from datetime import datetime
 import random
 
 # ---- SCHOOL INFO ----
@@ -145,24 +145,12 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
 
     # Create a new RFID card
     def create(self, validated_data):
-        card_number = validated_data.get('card_number')
-
-        # Check if card_number already exists
-        if RFIDCard.objects.filter(card_number=card_number).exists():
-            raise serializers.ValidationError({"code": 105, "message": "This card number already exists"})
-        
         control_number = self.generate_control_number()
         validated_data['control_number'] = control_number
-        return RFIDCard.objects.create(**validated_data)
+        return RFIDCard.objects.create(is_active=False, **validated_data)
 
      # Update RFID Card (Prevents control_number changes)
     def update(self, instance, validated_data):
-        card_number = validated_data.get('card_number')
-        student = validated_data.get("student")
-
-        # Check if card_number already exists
-        if RFIDCard.objects.filter(card_number=card_number).exclude(student=student).exists():
-            raise serializers.ValidationError({"code": 105, "message": "This card number already exists"})
         
         validated_data.pop('control_number', None)  # Ignore control_number if provided
         return super().update(instance, validated_data)

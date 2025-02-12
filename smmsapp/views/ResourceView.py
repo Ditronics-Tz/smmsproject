@@ -325,6 +325,16 @@ class CreateCardView(generics.CreateAPIView):
                 return Response({"code": 403, "message": "Access denied. Only can create new users"},
                     status=status.HTTP_403_FORBIDDEN
                 )
+
+            # Check if student have a card
+            student = request.data.get("student")
+            if RFIDCard.objects.filter(student=student).exists():
+                return Response({"code": 112, "message": "This student already have a card"},status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if card number already taken
+            card_number = request.data.get("card_number")
+            if RFIDCard.objects.filter(card_number=card_number).exists():
+                return Response({"code": 105, "message": "This card number already exists"}, status=status.HTTP_400_BAD_REQUEST)
             
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -335,7 +345,7 @@ class CreateCardView(generics.CreateAPIView):
                     ,status=status.HTTP_201_CREATED
                 )
         except Exception as e:
-            return Response({"code": 500, "message": f"General System error - {e}"})
+            return Response({"code": 500, "message": f"General System error - {e}"},status=status.HTTP_400_BAD_REQUEST)
 
 
 # ---- API FOR EDIT CARD DETAILS ----  
@@ -352,6 +362,11 @@ class EditCardView(generics.UpdateAPIView):
         # Extract `user_id` from request data
         card_id = request.data.get('card_id')
         student = request.data.get('student')
+
+        # Check if card number already taken
+        card_number = request.data.get("card_number")
+        if RFIDCard.objects.filter(card_number=card_number).exclude(student=student).exists():
+            return Response({"code": 105, "message": "This card number already taken"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not card_id:
             return Response({"code" : 104, "message": "Card ID is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -420,7 +435,7 @@ class CardListView(APIView, PageNumberPagination):
 # ----- API FOR FETCH CARD DETAILS ----- 
 class CardDetailsView(generics.RetrieveAPIView):
     queryset = RFIDCard.objects.all()
-    serializer_class = FullAdminSerializer
+    serializer_class = RFIDCardSerializer
     permission_classes = [IsAdminOnly]
 
     def post(self, request, *args, **kwags):

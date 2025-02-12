@@ -140,4 +140,37 @@ class UserCreateSerializer(serializers.ModelSerializer):
             Notification.objects.create(recipient=user, type='reminder', message=message)
         return user
 
+    # Edit user
+    def update(self, instance, validated_data):
+        role = validated_data.pop('role')
+        student_ids = validated_data.pop('student_ids', [])
+        parent_ids = validated_data.pop('parent_ids', [])
+        user = None 
+
+        if role == 'student':
+            user = super().update(instance, validated_data)
+
+            # If `parent_id` is provided, link parent to student
+            for parent_id in parent_ids:
+                try:
+                    parent = CustomUser.objects.get(id=parent_id, role='parent')
+                    ParentStudent.objects.update_or_create(parent=parent, student=user)
+                except CustomUser.DoesNotExist:
+                    raise serializers.ValidationError({"code": 107, "message": "Invalid parent ID"})
+            
+        else:
+            user = super().update(instance, validated_data)
+
+            # If `student_id` is provided, link student to parent
+            for student_id in student_ids:
+                try:
+                    student = CustomUser.objects.get(id=student_id, role='student')
+                    ParentStudent.objects.update_or_create(parent=user, student=student)
+                except CustomUser.DoesNotExist:
+                    raise serializers.ValidationError({"code": 107, "message": "Invalid student ID"})
+        return user
+
+
+
+
 

@@ -90,28 +90,28 @@ WSGI_APPLICATION = 'smmsproject.wsgi.application'
 
 
 # ----- DATABASE LOCAL ------
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smmsDB',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': '127.0.0.1',
-        'PORT': '5433',
-    }
-}
-
-# ----- DATABASE PRODUCTION -----
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'smmsdb',
+#         'NAME': 'smmsDB',
 #         'USER': 'postgres',
-#         'PASSWORD': '123456789',
-#         'HOST': 'localhost',
-#         'PORT': '5432',
+#         'PASSWORD': '1234',
+#         'HOST': '127.0.0.1',
+#         'PORT': '5433',
 #     }
 # }
+
+# ----- DATABASE PRODUCTION -----
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'smmsdb',
+        'USER': 'postgres',
+        'PASSWORD': '123456789',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
 
 
 # Password validation
