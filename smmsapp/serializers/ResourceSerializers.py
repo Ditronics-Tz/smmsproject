@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from ..models import CustomUser, RFIDCard, ParentStudent, Transaction, ScanSession, School
+from ..models import CustomUser, RFIDCard, ParentStudent, Transaction, ScanSession, School, CanteenItem, ScannedData
 from django.db.models import Q
+from datetime import datetime
+import random
 
 # ---- SCHOOL INFO ----
 class SchoolSerializer(serializers.ModelSerializer):
@@ -8,18 +10,14 @@ class SchoolSerializer(serializers.ModelSerializer):
         model = School
         fields = ['id', 'name', 'location']
 
+
 # ----- USER INFO ----
 class UserSerializer(serializers.ModelSerializer):
     school = serializers.CharField(source='school.name',read_only=True)
     class Meta: 
         model = CustomUser
-        fields = ['id','first_name','middle_name', 'last_name','username','parent_type','gender','email','mobile_number','class_room','school','profile_picture','date_joined']
+        fields = ['id','first_name','middle_name','is_active', 'last_name','username','parent_type','gender','email','mobile_number','class_room','school','profile_picture','date_joined']
 
-# ------ RFID Card INFO -----
-class RFIDCardSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RFIDCard
-        fields = ['id','balance', 'is_active','control_number','card_number','issued_date']
 
 # ------ STUDENT INFO ----
 class StudentSerializer(serializers.ModelSerializer):
@@ -28,6 +26,7 @@ class StudentSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'first_name','middle_name', 'last_name', 'gender', 'class_room', 'school']
 
+
 # ------ PARENT INFO -----
 class ParentSerializer(serializers.ModelSerializer):
     # school = SchoolSerializer(read_only = True)
@@ -35,17 +34,35 @@ class ParentSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'first_name', 'last_name','parent_type', 'email', 'mobile_number', 'gender']
 
+
 # ----- TRANSACTION INFO ------
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model =  Transaction
         fields = ['id','amount','transaction_date','transaction_status']
 
+
 # ---- SESSION INFO -----
 class ScanSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScanSession
-        fields = ['id','status', 'type', 'created_at', 'updated_at']
+        fields = ['id','status', 'type', 'start_at','end_at' 'updated_at']
+
+
+# ------ RFID Card INFO -----
+class RFIDCardSerializer(serializers.ModelSerializer):
+    student = StudentSerializer(read_only=True)
+    class Meta:
+        model = RFIDCard
+        fields = ['id','balance', 'is_active','control_number','card_number','issued_date','student', 'created_at']
+
+
+# ----- ITEM INFO ----
+class CanteenItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CanteenItem
+        fields = '__all__'
+
 
 # ----- FULL STUDENT DETAILS -----
 class FullStudentSerializer(serializers.ModelSerializer):
@@ -67,6 +84,7 @@ class FullStudentSerializer(serializers.ModelSerializer):
         # def get_transactions(self, obj):
         #     transactions = Transaction.objects.filter(student=obj)
         #     return TransactionSerializer(transactions, many=True).data
+
 
 # ----- FULL PARENT DETAILS ----
 class FullParentSerializer(serializers.ModelSerializer):
@@ -108,3 +126,31 @@ class FullAdminSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id','first_name','middle_name',  'last_name','username','email', 'mobile_number','gender',
                   'school','school_id']
+
+
+# ----- CREATE RFID CARD -----
+class CreateRFIDCardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RFIDCard
+        fields = ['id', 'balance', 'student', 'is_active', 'control_number', 'card_number', 'issued_date']
+        read_only_fields = ['control_number']  # Ensure control_number isn't required in requests
+
+    # Generate control number automatically
+    def generate_control_number(self):
+        # Generate control number in the format STU{year}{month}{random6digit}
+        year = datetime.now().year
+        month = f"{datetime.now().month:02d}"  # Ensure month is always two digits (e.g., 01, 02)
+        random6digit = random.randint(100000, 999999)
+        return f"STU{year}{month}{random6digit}"
+
+    # Create a new RFID card
+    def create(self, validated_data):
+        control_number = self.generate_control_number()
+        validated_data['control_number'] = control_number
+        return RFIDCard.objects.create(is_active=False, **validated_data)
+
+     # Update RFID Card (Prevents control_number changes)
+    def update(self, instance, validated_data):
+        
+        validated_data.pop('control_number', None)  # Ignore control_number if provided
+        return super().update(instance, validated_data)
