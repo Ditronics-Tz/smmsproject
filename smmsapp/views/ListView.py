@@ -42,6 +42,6 @@ class AllSchoooListView(generics.ListAPIView):
 # --- api to return all items
 class AllCanteenItemView(generics.ListAPIView):
     queryset = CanteenItem.objects.all()
-    serializer_class = CanteenItem
+    serializer_class = CanteenItemSerializer
     permission_classes = [IsAuthenticated]
     page_size = None
