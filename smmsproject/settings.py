@@ -36,11 +36,12 @@ ALLOWED_HOSTS = [
     'ditronics.co.tz', 
     'adhimkitchen.ditronics.co.tz', 
     'www.adhimkitchen.ditronics.co.tz',
-    '192.168.100.8'
+    '192.168.103.29'
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://192.168.100.8:3005",
+    "http://192.168.103.29:3005",
+    "http://192.168.103.29:8000",
     "http://localhost:3005",
     "http://ditronics.co.tz:8000",
     "http://diatronis.co.tz:3000",
@@ -54,9 +55,9 @@ CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication crede
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-SECURE_SSL_REDIRECT = True # Redirects all HTTP traffic to HTTPS
-SESSION_COOKIE_SECURE = True  # Ensures session cookies are only sent over HTTPS
-CSRF_COOKIE_SECURE = True  # Ensures CSRF cookies are only sent over HTTPS
+# SECURE_SSL_REDIRECT = False # Redirects all HTTP traffic to HTTPS
+# SESSION_COOKIE_SECURE = True  # Ensures session cookies are only sent over HTTPS
+# CSRF_COOKIE_SECURE = True  # Ensures CSRF cookies are only sent over HTTPS
 
 # Application definition
 
@@ -106,28 +107,28 @@ WSGI_APPLICATION = 'smmsproject.wsgi.application'
 
 
 # ----- DATABASE LOCAL ------
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'smmsDB',
-#         'USER': 'postgres',
-#         'PASSWORD': '1234',
-#         'HOST': '127.0.0.1',
-#         'PORT': '5433',
-#     }
-# }
-
-# ----- DATABASE PRODUCTION -----
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smmsdb',
+        'NAME': 'smmsDB',
         'USER': 'postgres',
-        'PASSWORD': '123456789',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'PASSWORD': '1234',
+        'HOST': '127.0.0.1',
+        'PORT': '5433',
     }
 }
+
+# ----- DATABASE PRODUCTION -----
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'smmsdb',
+#         'USER': 'postgres',
+#         'PASSWORD': '123456789',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
 
 
 # Password validation

@@ -44,13 +44,13 @@ class ScanRFIDCardView(APIView):
             return Response({'code': 116, 'message': 'Invalid canteen item'}, status=status.HTTP_404_NOT_FOUND)
         
         # Check if student already purchase the item on same session
-        if ScannedData.objects.create(session=session, student=student, rfid_card=rfid_card).exists():
+        if ScannedData.objects.filter(session=session, student=student, rfid_card=rfid_card, item=item).exists():
             return Response({'code': 119, "message": "Already purchase this item"}, status=status.HTTP_400_BAD_REQUEST)
 
        # Check if student has exceeded 10 insufficient meals
         if rfid_card.insufficient_meal_count >= 10:
             message = f"Your child {student.first_name} does not get meal today because insuficient balance execeeded 10 times, Please recharge for your child to get a meal. Available Balance is {rfid_card.balance}"
-            return Response({'error': 'Meal denied. Student exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'code': 118, 'message': 'Meal denied. Student exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
 
         # Deduct balance if sufficient funds
         if rfid_card.balance >= item.price:
@@ -58,9 +58,9 @@ class ScanRFIDCardView(APIView):
             message = f"Your child {student.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
         else:
             # Allow the meal but apply penalty (-500)
-            rfid_card.balance -= 500  
+            rfid_card.balance -= (item.price + 500)  
             rfid_card.insufficient_meal_count += 1
-            message = f"Your child {student.first_name} card has purchase {item.name} with price {item.price} and penalt of -500 Tsh. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalts"
+            message = f"Your child {student.first_name} card has purchase {item.name} with price {item.price} and penalt of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalts"
 
         rfid_card.save()
 
@@ -68,7 +68,8 @@ class ScanRFIDCardView(APIView):
         scanned_data = ScannedData.objects.create(
             session=session,
             student=student,
-            rfid_card=rfid_card
+            rfid_card=rfid_card,
+            item=item
         )
 
         # Log transaction
@@ -76,7 +77,7 @@ class ScanRFIDCardView(APIView):
             student=student,
             rfid_card=rfid_card,
             item=item,
-            amount=item.price if rfid_card.balance >= item.price else -500
+            amount=item.price if rfid_card.balance >= item.price else (item.price + 500)
         )
 
         # Notify parent
@@ -94,6 +95,22 @@ class ScanRFIDCardView(APIView):
         serializer = ScannedDataSerializer(scanned_data)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
+# --- API FOR GET ACTIVE SESSION -----
+class ActiveSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        operator = request.user
+        # Query the active session (assuming only one can be active at a time)
+        active_session = ScanSession.objects.filter(operator = operator,status="active").first()
+        
+        if active_session:
+            serializer = ScanSessionSerializer(active_session)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response({'code': 114, "message": "No active session available."}, status=status.HTTP_404_NOT_FOUND)
+        
 
 # ---- API FOR START SESSION ----
 class StartScanSessionView(APIView):
@@ -116,22 +133,6 @@ class StartScanSessionView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"},status=status.HTTP_400_BAD_REQUEST)
-
-
-# --- API FOR GET ACTIVE SESSION -----
-class ActiveSessionView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        operator = request.user
-        # Query the active session (assuming only one can be active at a time)
-        active_session = ScanSession.objects.filter(operator = operator,is_active=True, start_at__lte=timezone.now(), end_at__gte=timezone.now()).first()
-        
-        if active_session:
-            serializer = ScanSessionSerializer(active_session)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        else:
-            return Response({'code': 114, "message": "No active session available."}, status=status.HTTP_404_NOT_FOUND)
 
 
 # --- API FOR END SESSION -----
@@ -201,11 +202,16 @@ class ScannedDataListView(APIView, PageNumberPagination):
     
     def post(self, request, *args, **kwargs):
         user = request.user
-        session_id = self.request.query_params.get('session_id', None)
+        session_id = request.data.get('session_id')
         search_query = request.data.get("search").strip()
 
-        if session_id:
-            session =  ScannedData.objects.filter(session_id=session_id).order_by('-scanned_at')
+        session =  ScannedData.objects.filter(session=session_id).order_by('-scanned_at')
+
+        if not session_id:
+            return Response({'code': 120, "message": "Session id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not session:
+            return Response({"code": 121, "message": "No scanned data found for this session"}, status=status.HTTP_404_NOT_FOUND)
     
         if search_query:
             session = session.filter(
