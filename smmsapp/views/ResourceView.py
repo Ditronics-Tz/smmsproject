@@ -14,7 +14,7 @@ from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly
 # ----- API FOR GET SCHOOL -----
 class SchoolListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminUser]
-    page_size = 20
+    page_size = 50
 
     def post(self, request, *args, **kwargs):
         search_query = request.data.get("search").strip()
@@ -231,7 +231,7 @@ class AdminDetailsView(generics.RetrieveAPIView):
 # ----- API FOR FETCH ITEM LIST -----
 class ItemListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminOnly]
-    page_size = 20
+    page_size = 50
 
     def post(self, request, *args, **kwargs):
         search_query = request.data.get("search").strip()
@@ -410,7 +410,7 @@ class DeleteCardView(APIView):
 # ---- API FOR GET CARD LIST
 class CardListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminUser]
-    page_size = 20
+    page_size = 50
 
     def post(self, request, *args, **kwargs):
         search_query = request.data.get("search").strip()

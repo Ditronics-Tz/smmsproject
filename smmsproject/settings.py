@@ -30,17 +30,33 @@ SECRET_KEY = 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3005",
-    "http://ditronics.co.tz:8000"
+ALLOWED_HOSTS = [
+    'localhost', 
+    '127.0.0.1', 
+    'ditronics.co.tz', 
+    'adhimkitchen.ditronics.co.tz', 
+    'www.adhimkitchen.ditronics.co.tz',
+    '192.168.100.8'
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://192.168.100.8:3005",
+    "http://localhost:3005",
+    "http://ditronics.co.tz:8000",
+    "http://diatronis.co.tz:3000",
+    "https://adhimkitchen.ditronics.co.tz",
+    "https://www.adhimkitchen.ditronics.co.tz"
+]
+
+CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication credentials
 
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+SECURE_SSL_REDIRECT = True # Redirects all HTTP traffic to HTTPS
+SESSION_COOKIE_SECURE = True  # Ensures session cookies are only sent over HTTPS
+CSRF_COOKIE_SECURE = True  # Ensures CSRF cookies are only sent over HTTPS
 
 # Application definition
 
