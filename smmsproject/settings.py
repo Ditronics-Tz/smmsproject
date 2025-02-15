@@ -20,7 +20,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # custome user model
 AUTH_USER_MODEL = 'smmsapp.CustomUser'
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
@@ -28,7 +27,7 @@ AUTH_USER_MODEL = 'smmsapp.CustomUser'
 SECRET_KEY = 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     'localhost', 
@@ -36,11 +35,9 @@ ALLOWED_HOSTS = [
     'ditronics.co.tz', 
     'adhimkitchen.ditronics.co.tz', 
     'www.adhimkitchen.ditronics.co.tz',
-    '192.168.100.8'
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://192.168.100.8:3005",
     "http://localhost:3005",
     "http://ditronics.co.tz:8000",
     "http://diatronis.co.tz:3000",
@@ -48,13 +45,15 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.adhimkitchen.ditronics.co.tz"
 ]
 
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication credentials
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-SECURE_SSL_REDIRECT = True # Redirects all HTTP traffic to HTTPS
+CSRF_TRUSTED_ORIGINS = ["https://31.220.82.177"]
+
+SECURE_SSL_REDIRECT = False # Redirects all HTTP traffic to HTTPS
 SESSION_COOKIE_SECURE = True  # Ensures session cookies are only sent over HTTPS
 CSRF_COOKIE_SECURE = True  # Ensures CSRF cookies are only sent over HTTPS
 

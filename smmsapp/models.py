@@ -188,6 +188,7 @@ class ScannedData(models.Model):
     session = models.ForeignKey(ScanSession, on_delete=models.CASCADE)  # Links to active session
     student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
     rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
+    item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE, null=True, blank=True)
     scanned_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
