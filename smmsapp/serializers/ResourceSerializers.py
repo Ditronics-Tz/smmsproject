@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from ..models import CustomUser, RFIDCard, ParentStudent, Transaction, ScanSession, School, CanteenItem, ScannedData
+from ..models import *
 from django.db.models import Q
 from datetime import datetime
 import random
@@ -37,9 +37,15 @@ class ParentSerializer(serializers.ModelSerializer):
 
 # ----- TRANSACTION INFO ------
 class TransactionSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    card_number = serializers.CharField(source='rfid_card.card_number', read_only=True)
+    item_name = serializers.CharField(source='item.name', read_only=True)
     class Meta:
         model =  Transaction
-        fields = ['id','amount','transaction_date','transaction_status']
+        fields = ['id','amount','student_name', 'card_number','item','transaction_date','transaction_status']
+
+    def get_student_name(self, obj):
+        return f'{obj.student.first_name} {obj.student.last_name}'
 
 
 # ---- SESSION INFO -----
@@ -140,8 +146,9 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         # Generate control number in the format STU{year}{month}{random6digit}
         year = datetime.now().year
         month = f"{datetime.now().month:02d}"  # Ensure month is always two digits (e.g., 01, 02)
-        random6digit = random.randint(100000, 999999)
-        return f"STU{year}{month}{random6digit}"
+        date = f"{datetime.now().day:02d}"
+        random4digit = random.randint(1000, 9999)
+        return f"ZC{year}{month}{date}{random4digit}"
 
     # Create a new RFID card
     def create(self, validated_data):
@@ -154,3 +161,16 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         
         validated_data.pop('control_number', None)  # Ignore control_number if provided
         return super().update(instance, validated_data)
+    
+
+# ----- SERIALIZER FOR NOTIFICATIONS ------
+class NotificationSerializer(serializers.ModelSerializer):
+    recipient = serializers.SerializerMethodField()
+    class Meta:
+        model = Notification
+        fields = ['id', 'message', 'status', 'type', 'created_at', 'recipient']
+
+    def get_recipient(self,obj):
+        return f'{obj.recipient.first_name} {obj.recipient.last_name}'
+
+

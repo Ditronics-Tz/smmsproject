@@ -115,8 +115,9 @@ class CanteenItem(models.Model):
 class Transaction(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
-        ('sent', 'Sent'),
+        ('successful', 'Successful'),
         ('failed', 'Failed'),
+        ('penalt', 'Penalt')
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -150,6 +151,7 @@ class Notification(models.Model):
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, null=True, blank=True)  # Optional
     message = models.TextField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    retry_count = models.IntegerField(default=0)
     type = models.CharField(max_length=15, choices=TYPE_CHOICES, default='message')  # Type of notification
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -55,11 +55,13 @@ class ScanRFIDCardView(APIView):
         # Deduct balance if sufficient funds
         if rfid_card.balance >= item.price:
             rfid_card.balance -= item.price
+            trans_status = 'successful'
             message = f"Your child {student.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
         else:
             # Allow the meal but apply penalty (-500)
             rfid_card.balance -= (item.price + 500)  
             rfid_card.insufficient_meal_count += 1
+            trans_status = 'penalt'
             message = f"Your child {student.first_name} card has purchase {item.name} with price {item.price} and penalt of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalts"
 
         rfid_card.save()
@@ -77,7 +79,8 @@ class ScanRFIDCardView(APIView):
             student=student,
             rfid_card=rfid_card,
             item=item,
-            amount=item.price if rfid_card.balance >= item.price else (item.price + 500)
+            amount=item.price if rfid_card.balance >= item.price else (item.price + 500),
+            transaction_status = trans_status
         )
 
         # Notify parent
@@ -231,7 +234,7 @@ class ScannedDataListView(APIView, PageNumberPagination):
 
 # ---- API FOR FETCH TRANSACTIONSERIALIZER -----
 class TransactionListView(APIView, PageNumberPagination):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrParent]
     page_size = 50
 
     def post(self, request, *args, **kwargs):
@@ -248,7 +251,7 @@ class TransactionListView(APIView, PageNumberPagination):
             # Extract the student users from the ParentStudent relationships
             children = [parent_student.student for parent_student in parent_students]
             # Filter transactions for those students
-            transactions = Transaction.objects.filter(student__in=children)
+            transactions = Transaction.objects.filter(student__in=children).order_by('-transaction_date')
         else:
             return Response({'code': 403, 'message': 'Unauthorized access'}, status=status.HTTP_403_FORBIDDEN)
         

@@ -20,6 +20,7 @@ class AuthUserSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+    # fcm_token = serializers.CharField(required=False)
 
     def validate(self, data):
         username = data.get('username')
@@ -58,25 +59,21 @@ class UserCreateSerializer(serializers.ModelSerializer):
                   'parent_ids', 'student_ids']
 
     # Generate strong password
-    def generate_password(self):
+    def generate_password(self, last_name):
         """Generate a strong random password."""
-        uppercase = string.ascii_uppercase
-        lowercase = string.ascii_lowercase
         digits = string.digits
         special_chars = "!@#$%&*"  # Limit special characters
 
         password = [
-            random.choice(uppercase),
-            random.choice(lowercase),
             random.choice(digits),
             random.choice(special_chars)
         ]
 
-        all_chars = uppercase + lowercase + digits + special_chars
-        password += random.choices(all_chars, k=4)  # Ensure 8-character length
+        all_chars = digits + special_chars
+        password += random.choices(all_chars, k=1)  # Ensure 8-character length
         random.shuffle(password)
 
-        return "".join(password)
+        return f'{last_name}{"".join(password)}'
 
     # Generate unique username for student
     def generate_username(self, first_name, last_name, school_name):
@@ -121,7 +118,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"code": 107, "message": "Invalid parent ID"})
             
         else:
-            password = self.generate_password()
+            last_name = validated_data.get('last_name', '').strip()
+            password = self.generate_password(last_name)
             validated_data['password'] = password # password
 
             user = CustomUser.objects.create(role=role, **validated_data)
