@@ -7,3 +7,8 @@ __pycach__/
 venv/
 .venv
 .env
+server-setup.txt
+*.rdb
+smms-project-304ac-firebase-adminsdk-fbsvc-54c852dcec.json
+*.db
+send_pending_logs.log

@@ -494,3 +494,38 @@ class ActivateDeactivateCardView(APIView):
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
+
+
+# ---- API FOR NOTIFICATIONS -----
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        notifications = Notification.objects.filter(recipient=request.user).order_by('-created_at')[:100]
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data)
+    
+
+# ---- API FOR RETURN ALL NOTIFICATIONS -----
+class AllNotificationsView(APIView, PageNumberPagination):
+    permission_classes = [IsAdminUser]
+    page_size = 50
+
+    def post(self, request, *args, **kwargs):
+        search_query = request.data.get("search").strip()
+        notifications = Notification.objects.all().order_by('-created_at')
+
+        if search_query:
+            notifications = notifications.filter(
+                Q(type__icontains=search_query) | Q(status__icontains = search_query) | Q(created_at__icontains = search_query)
+            )
+        
+        # Apply pagination
+        result = self.paginate_queryset(notifications, request, view=self)
+        if result is not None:
+            serializer = NotificationSerializer(result, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        # If fail return all data/fields
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

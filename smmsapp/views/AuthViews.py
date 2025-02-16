@@ -29,9 +29,13 @@ class LoginView(APIView):
 
         username = serializer.validated_data['username']
         password = serializer.validated_data['password']
+        fcm_token = request.data.get('fcm_token')
 
         # Check if user exists by username or mobile number
-        user = User.objects.filter(Q(username=username) | Q(mobile_number=username)).first()
+        user = User.objects.filter(Q(username=username) | Q(mobile_number=username) | Q(email=username)).first()
+        if fcm_token:
+            user.fcm_token = fcm_token
+            user.save()
 
         if user and user.check_password(password):
             tokens = get_tokens_for_user(user)
@@ -81,10 +85,18 @@ class CreateUserView(generics.CreateAPIView):
             
             # check username for not student user
             username = request.data.get('username')
+            mobile = request.data.get('mobile_number')
+            email =  request.data.get('email')
+
             if username and User.objects.filter(username=username).exists():
                 return Response({"code": 108, "message": "This user is already exist"},status=status.HTTP_400_BAD_REQUEST)
 
+            if mobile and User.objects.filter(mobile_number=mobile).exists():
+                return Response({"code": 122, "message": "This mobile number is already exist"},status=status.HTTP_400_BAD_REQUEST)
 
+            if email and User.objects.filter(email=email).exists():
+                return Response({"code": 123, "message": "This email is already exist"},status=status.HTTP_400_BAD_REQUEST)
+        
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             user = serializer.save()  # This triggers the control number generation for students
