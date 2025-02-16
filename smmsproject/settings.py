@@ -79,8 +79,7 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # --- for message engine
-# CELERY_BROKER_URL = 'redis://localhost:6379/0'  # --- local
-CELERY_BROKER_URL = 'redis://31.220.82.177:6379/0' # -- production
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 
