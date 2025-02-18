@@ -22,8 +22,9 @@ from . import settings
 urlpatterns = [
     path('admin-auth/', admin.site.urls),
     path('',include('smmsapp.urls.adminUrls')),
-    path('auth/', include('smmsapp.urls.authUrls')),
     path('api-auth/', include('rest_framework.urls')),
+    path('auth/', include('smmsapp.urls.authUrls')),
+    path('dashboard/', include('smmsapp.urls.dashboardUrls')),
     path('resources/', include("smmsapp.urls.resourceUrls")),
     path('sessions/', include("smmsapp.urls.sessionUrls")),
     path('list/',include("smmsapp.urls.listUrls")),
