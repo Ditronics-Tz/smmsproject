@@ -1,12 +1,13 @@
 import os
 import logging
 from celery import shared_task
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.conf import settings
 from django.utils.timezone import now
 from pyfcm import FCMNotification
 from dotenv import load_dotenv
 from .models import Notification
+from django.template.loader import render_to_string
 
 # Load .env variables
 load_dotenv()
@@ -49,16 +50,26 @@ def send_pending_notifications():
             try:
                 # Send Email if the recipient has an email
                 if notification.recipient.email:
-                    subject = f"New Notification: {notification.type}"
-                    message = notification.message
+                    subject = f"New Notification: {notification.type.upper()}"
+                    # message = notification.message
                     recipient_list = [notification.recipient.email]
+
+                    # Load the HTML template and render it with context
+                    html_content = render_to_string("email_template.html", {
+                        "user": notification.recipient,
+                        "notification": notification,
+                        "action_url": "http://adhimkitchen.ditronics.co.tz/"  # Change as needed
+                    })
                     
                     try:
-                        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, recipient_list)
+                        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, recipient_list)
+                        email = EmailMultiAlternatives(subject, "", settings.DEFAULT_FROM_EMAIL, recipient_list)
+                        email.attach_alternative(html_content, "text/html")
+                        email.send()
                         logger.info(f"Email sent successfully to {notification.recipient.email}.")
                     except Exception as e:
                         logger.error(f"Failed to send email to {notification.recipient.email}: {e}")
-                        break
+                        # break
 
                 # Send push notification if FCM token is available
                 if notification.recipient.fcm_token:
@@ -72,7 +83,7 @@ def send_pending_notifications():
 
                 else:
                     logger.warning(f"User {notification.recipient.mobile_number} has no FCM token.")
-                    break
+                    # break
 
                 # Mark notification as sent
                 notification.status = "sent"
