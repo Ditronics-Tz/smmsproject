@@ -3,23 +3,24 @@ from reportlab.pdfgen import canvas
 from django.utils.timezone import now
 from io import BytesIO
 from django.db.models import Sum
-from .models import Transaction
+from .models import Transaction, RFIDCard
 
 def generate_end_of_day_report():
     buffer = BytesIO()
     today = now().date()
     
     # Get all successful transactions for today
-    transactions = Transaction.objects.filter(transaction_date__date=today, transaction_status="successful")
+    transactions = Transaction.objects.filter(transaction_date__date=today)
 
     # Calculate sales data
     total_sales = transactions.aggregate(Sum('amount'))['amount__sum'] or 0
 
-    # Assume start balance (fetch from another model if needed)
-    start_balance = 10000  # Example, modify based on business logic
+    # Start Balance
+    available_balance = RFIDCard.objects.aggregate(Sum('balance'))['balance__sum']
+    start_balance = available_balance + total_sales  # Example, modify based on business logic
 
     # Calculate remaining balance
-    remaining_balance = start_balance + total_sales
+    remaining_balance = start_balance - total_sales
 
     # Create PDF
     pdf = canvas.Canvas(buffer, pagesize=letter)
@@ -37,19 +38,30 @@ def generate_end_of_day_report():
     # Table Header
     pdf.setFont("Helvetica-Bold", 10)
     pdf.drawString(50, 630, "Transactions:")
-    pdf.drawString(50, 610, "ID")
-    pdf.drawString(150, 610, "Time")
-    pdf.drawString(250, 610, "Amount")
-    pdf.drawString(350, 610, "Status")
+    pdf.drawString(50, 610, "S/N")  # Adding Serial Number column
+    pdf.drawString(100, 610, "Student Name")  # Adding Student Name column
+    pdf.drawString(220, 610, "Item")
+    pdf.drawString(315, 610, "Time")
+    pdf.drawString(410, 610, "Amount")
+    pdf.drawString(510, 610, "Status")
 
     y = 590
     pdf.setFont("Helvetica", 10)
+    serial_number = 1  # Initialize serial number
+
     for transaction in transactions:
-        pdf.drawString(50, y, str(transaction.id))
-        pdf.drawString(150, y, str(transaction.transaction_date.time()))
-        pdf.drawString(250, y, f"{transaction.amount:.2f}")
-        pdf.drawString(350, y, transaction.transaction_status.capitalize())
+        # Draw the serial number, student name, item, time, amount, and status
+        pdf.drawString(50, y, str(serial_number))  # Serial number
+        pdf.drawString(100, y, f"{transaction.student.first_name} {transaction.student.last_name}")  # Student Name
+        pdf.drawString(220, y, str(transaction.item.name))  # Item
+        pdf.drawString(315, y, str(transaction.transaction_date.strftime("%H:%M:%S")))  # Time
+        pdf.drawString(410, y, f"{transaction.amount:.2f}")  # Amount
+        pdf.drawString(510, y, transaction.transaction_status.capitalize())  # Status
+    
+        # Increment serial number and move to next row
+        serial_number += 1
         y -= 20
+    
         if y < 50:  # Start new page if needed
             pdf.showPage()
             pdf.setFont("Helvetica", 10)
