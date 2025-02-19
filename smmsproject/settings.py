@@ -32,21 +32,21 @@ SECRET_KEY = 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@
 DEBUG = False
 
 ALLOWED_HOSTS = [
-    '192.168.103.29',
     'localhost', 
     '127.0.0.1', 
     'ditronics.co.tz', 
     'adhimkitchen.ditronics.co.tz', 
     'www.adhimkitchen.ditronics.co.tz',
+    'backend1.ditronics.co.tz'
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://192.168.103.29",
     "http://localhost:3005",
     "http://ditronics.co.tz:8000",
     "http://diatronis.co.tz:3000",
     "https://adhimkitchen.ditronics.co.tz",
-    "https://www.adhimkitchen.ditronics.co.tz"
+    "https://www.adhimkitchen.ditronics.co.tz",
+    "https://backend1.ditronics.co.tz"
 ]
 
 CORS_ALLOW_ALL_ORIGINS = False
@@ -55,7 +55,7 @@ CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication crede
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-CSRF_TRUSTED_ORIGINS = ["https://31.220.82.177"]
+CSRF_TRUSTED_ORIGINS = ["https://31.220.82.177","https://backend1.ditronics.co.tz"]
 
 SECURE_SSL_REDIRECT = False # Redirects all HTTP traffic to HTTPS
 SESSION_COOKIE_SECURE = True  # Ensures session cookies are only sent over HTTPS

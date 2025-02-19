@@ -7,7 +7,7 @@ from django.db.models import Q
 from ..models import *
 from ..serializers.SessionSerializers import ScanSessionSerializer, ScannedDataSerializer, TransactionSerializer
 from django.utils import timezone
-from ..permissions.CustomPermissions import IsOperator, IsAdminOrParent, IsAdminOnly
+from ..permissions.CustomPermissions import IsAdminOrOperator, IsOperator, IsAdminOrParent, IsAdminOnly
 
 
 # --- API FOR SCAN RFID CARD ----- THIS IS THE MAIN FUNCTIONALITY OF THIS SYSTEM -----
@@ -170,31 +170,18 @@ class EndScanSessionView(APIView):
 
 
 # ----- API FOR GET SESSION LIST -----
-class SessionListView(APIView, PageNumberPagination):
-    permission_classes = [IsAuthenticated]
-    page_size = 30
+class SessionListView(APIView):
+    permission_classes = [IsAdminOrOperator]
 
     def post(self, request, *args, **kwargs):
         user = request.user
-        search_query = request.data.get("search").strip()
 
         if user.role == 'operator':
-            session = ScanSession.objects.filter(operator=user).order_by('status', 'start_at')
+            session = ScanSession.objects.filter(operator=user).order_by('status', '-start_at')[:10]
         elif user.role == 'admin':
-            session = ScanSession.objects.all().order_by('status', 'start_at')
+            session = ScanSession.objects.all().order_by('status', '-start_at')[:20]
         else:
             return Response({'code': 403, 'message': 'Only operators can end a session'}, status=status.HTTP_403_FORBIDDEN)
-        
-        if search_query:
-            session = session.filter(
-                Q(status__icontains=search_query) | Q(start_at__icontains=search_query)
-            )
-        
-        # Apply pagination
-        result = self.paginate_queryset(session, request, view=self)
-        if result is not None:
-            serializer = ScanSessionSerializer(result, many=True)
-            return self.get_paginated_response(serializer.data)
 
         # If fail return all data/fields
         serializer = ScanSessionSerializer(session, many=True)

@@ -8,6 +8,8 @@ class CountsSerializer(serializers.Serializer):
     total_available_balance = serializers.DecimalField(max_digits=10, decimal_places=2)
     total_transactions = serializers.IntegerField()
     sessions = serializers.IntegerField()
+    price_week = serializers.IntegerField()
+    price_today = serializers.IntegerField()
 
 # ---- SALES SUMMARY SERIALIZER -----
 class SalesSummarySerializer(serializers.Serializer):

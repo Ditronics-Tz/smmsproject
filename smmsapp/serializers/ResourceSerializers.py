@@ -24,7 +24,7 @@ class StudentSerializer(serializers.ModelSerializer):
     school = serializers.CharField(source='school.name',read_only=True)
     class Meta: 
         model = CustomUser
-        fields = ['id', 'first_name','middle_name', 'last_name', 'gender', 'class_room', 'school']
+        fields = ['id', 'first_name','middle_name','rfid_card', 'last_name', 'gender', 'class_room', 'school']
 
 
 # ------ PARENT INFO -----

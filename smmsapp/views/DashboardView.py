@@ -6,33 +6,55 @@ from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated, IsAdminUser
 
+from ..serializers.ResourceSerializers import FullStudentSerializer, StudentSerializer
+
 from ..utils import generate_end_of_day_report, generate_parent_end_of_day_report
-from ..models import RFIDCard, Transaction, CustomUser, ScanSession, ScannedData
+from ..models import ParentStudent, RFIDCard, Transaction, CustomUser, ScanSession, ScannedData
 from ..serializers.DashboardSerializer import *
-from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly
+from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly, IsOperator, IsAdminOrOperator
 
 #  ----- API FOR COUNTS IN DASHBOARD ------
 class CountsView(APIView):
-    permission_classes = [IsAdminOnly]
+    permission_classes = [IsAdminOrOperator]
 
     def post(self, request, *args, **kwargs):
+        today = now().date()
+        week_start = today - timedelta(days=today.weekday())  # Get Monday of the current week
+        
         total_students = CustomUser.objects.filter(role='student').count()
         total_parents = CustomUser.objects.filter(role='parent').count()
         total_available_balance = RFIDCard.objects.aggregate(total_balance=Sum('balance'))['total_balance'] or 0
-        total_transactions = Transaction.objects.count()
+        total_transactions = Transaction.objects.count() 
 
-        sessions = 0
+        total_price_today = 0
+        total_price_week = 0
+
+        total_sessions = 0
+
         if request.user.role == 'operator':
-            sessions = ScanSession.objects.filter(operator=request.user).count()
-        else:
-            sessions = ScanSession.objects.count()
+            # Get total sessions
+            total_sessions = ScanSession.objects.filter(operator=request.user).count()
+            # Get total price of items scanned by the operator TODAY
+            total_price_today = ScannedData.objects.filter(
+                session__operator=request.user,
+                scanned_at__date=today
+            ).aggregate(total_price=Sum('item__price'))['total_price'] or 0
+
+            # Get total price of items scanned by the operator THIS WEEK
+            total_price_week = ScannedData.objects.filter(
+                session__operator=request.user,
+                scanned_at__date__gte=week_start  # Get from Monday of this week till today
+            ).aggregate(total_price=Sum('item__price'))['total_price'] or 0
+            
 
         data = {
             "total_students": total_students,
             "total_parents": total_parents,
             "total_available_balance": total_available_balance,
             "total_transactions": total_transactions,
-            "sessions": sessions
+            "sessions": total_sessions,
+            "price_week": total_price_week,
+            "price_today": total_price_today,
         }
 
         serializer = CountsSerializer(data)
@@ -99,6 +121,7 @@ class WeeklySalesTrendView(APIView):
         serializer = WeeklySalesSerializer(formatted_sales_data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+
 # ---- API FOR GET REPORT --------
 class EndOfDayReportView(APIView):
     """Generate and download End-of-Day report"""
@@ -116,3 +139,58 @@ class EndOfDayReportView(APIView):
                 )
         
         return FileResponse(pdf_buffer, as_attachment=True, filename="SMMS_Day_report.pdf")
+    
+
+# ----- API FOR LAST SESSION DETAILS ------
+class LastSessionDetailsView(APIView):
+    """API to return the last session details for an operator."""
+    permission_classes = [IsOperator]
+
+    def post(self, request):
+        # Ensure user is an operator
+        if request.user.role != "operator":
+            return Response({"code": 403, "message": "Access denied. Only operators can view this."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get the last session of the operator
+        last_session = ScanSession.objects.filter(operator=request.user).order_by('-start_at').first()
+
+        if not last_session:
+            return Response({"code": 404, "message": "No sessions found for this operator."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get all scanned data for the last session
+        scanned_data = ScannedData.objects.filter(session=last_session)
+
+        # Calculate total price of items in last session
+        total_price = scanned_data.aggregate(Sum('item__price'))['item__price__sum'] or 0
+
+        # Count number of students scanned
+        student_count = scanned_data.values('student').distinct().count()
+
+        return Response({
+            "session_id": str(last_session.id),
+            "session_type": last_session.type,
+            "session_status": last_session.status,
+            "start_time": last_session.start_at,
+            "end_time": last_session.end_at,
+            "total_price": total_price,
+            "student_count": student_count
+        }, status=status.HTTP_200_OK)
+    
+
+# API FOR RETURN PARENT'S STUDENT DETAILS
+class ParentStudentsView(APIView):
+    permission_classes = [IsAdminOrParent]
+
+    def get(self, request):
+        # Ensure user is a parent
+        if request.user.role != "parent":
+            return Response({"code": 403,"message": "Access denied. Only parents can access this."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get all students linked to the parent
+        parent_students = ParentStudent.objects.filter(parent=request.user)
+        students = [ps.student for ps in parent_students]
+
+        # Serialize the student data
+        serializer = FullStudentSerializer(students, many=True)
+
+        return Response(serializer.data, status=status.HTTP_403_FORBIDDEN)

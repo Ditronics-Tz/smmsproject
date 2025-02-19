@@ -5,8 +5,8 @@ from ..models import ScanSession,ScannedData, RFIDCard, CanteenItem, Transaction
 class ScanSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScanSession
-        fields = ['id', 'operator', 'type', 'status', 'start_at', 'end_at', 'updated_at']
-        read_only_fields = ['id', 'start_at', 'end_at', 'updated_at']
+        fields = ['id', 'operator', 'type', 'status', 'start_at', 'end_at']
+        read_only_fields = ['id', 'start_at', 'end_at']
 
 
 # ----- SCANNED DATA SERIALIZER ----
