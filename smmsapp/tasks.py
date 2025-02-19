@@ -50,7 +50,7 @@ def send_pending_notifications():
             try:
                 # Send Email if the recipient has an email
                 if notification.recipient.email:
-                    subject = f"New Notification: {notification.type.upper()}"
+                    subject = f"{notification.title.upper() if notification.title else 'SMMS NOTIFICATION'}"
                     # message = notification.message
                     recipient_list = [notification.recipient.email]
 
@@ -75,14 +75,14 @@ def send_pending_notifications():
                 if notification.recipient.fcm_token:
                     response = push_service.notify(
                         fcm_token=notification.recipient.fcm_token, 
-                        notification_title=notification.type,
+                        notification_title=notification.title,
                         notification_body=notification.message,
-                        data_payload={"status": notification.status, "id": notification.id}
+                        # data_payload={"status": notification.status, "id": notification.id}
                     )
-                    logger.info(f"Push Notification {notification.id} sent successfully.")
+                    logger.info(f"Push Notification to {notification.recipient.first_name} sent successfully.")
 
                 else:
-                    logger.warning(f"User {notification.recipient.mobile_number} has no FCM token.")
+                    logger.warning(f"User {notification.recipient.first_name} - {notification.recipient.mobile_number} has no FCM token.")
                     # break
 
                 # Mark notification as sent
@@ -95,12 +95,12 @@ def send_pending_notifications():
                 retry_count += 1
                 notification.retry_count = retry_count
                 notification.save()
-                logger.error(f"Failed to send notification {notification.id}, attempt {retry_count}: {e}")
+                logger.error(f"Failed to send notification to  {notification.recipient.first_name}, attempt {retry_count}: {e}")
 
                 if retry_count >= max_retries:
                     notification.status = "failed"
                     notification.save()
-                    logger.error(f"Notification {notification.id} failed after {max_retries} attempts.")
+                    logger.error(f"Notification {notification.id} to {notification.recipient.first_name} failed after {max_retries} attempts.")
                     break  # Exit retry loop after reaching max retries
 
     return "Notification processing complete."

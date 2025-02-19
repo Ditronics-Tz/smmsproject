@@ -12,3 +12,4 @@ server-setup.txt
 smms-project-304ac-firebase-adminsdk-fbsvc-54c852dcec.json
 *.db
 send_pending_logs.log
+*.log

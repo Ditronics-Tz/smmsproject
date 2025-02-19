@@ -6,8 +6,8 @@ from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated, IsAdminUser
 
-from ..utils import generate_end_of_day_report
-from ..models import RFIDCard, Transaction, CustomUser
+from ..utils import generate_end_of_day_report, generate_parent_end_of_day_report
+from ..models import RFIDCard, Transaction, CustomUser, ScanSession, ScannedData
 from ..serializers.DashboardSerializer import *
 from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly
 
@@ -21,11 +21,18 @@ class CountsView(APIView):
         total_available_balance = RFIDCard.objects.aggregate(total_balance=Sum('balance'))['total_balance'] or 0
         total_transactions = Transaction.objects.count()
 
+        sessions = 0
+        if request.user.role == 'operator':
+            sessions = ScanSession.objects.filter(operator=request.user).count()
+        else:
+            sessions = ScanSession.objects.count()
+
         data = {
             "total_students": total_students,
             "total_parents": total_parents,
             "total_available_balance": total_available_balance,
-            "total_transactions": total_transactions
+            "total_transactions": total_transactions,
+            "sessions": sessions
         }
 
         serializer = CountsSerializer(data)
@@ -95,8 +102,17 @@ class WeeklySalesTrendView(APIView):
 # ---- API FOR GET REPORT --------
 class EndOfDayReportView(APIView):
     """Generate and download End-of-Day report"""
-    permission_classes = [IsAdminOnly]  # Only Admins can access
+    permission_classes = [IsAdminOrParent]  # Only Admins can access
 
     def get(self, request):
-        pdf_buffer = generate_end_of_day_report()
-        return FileResponse(pdf_buffer, as_attachment=True, filename="end_of_day_report.pdf")
+        pdf_buffer = None
+        if request.user.role == "admin":
+            pdf_buffer = generate_end_of_day_report()
+        elif request.user.role == "parent":
+            pdf_buffer = generate_parent_end_of_day_report(request)
+        else:
+            return Response({"code": 403, "message": "Access denied. Only can create new users"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        return FileResponse(pdf_buffer, as_attachment=True, filename="SMMS_Day_report.pdf")

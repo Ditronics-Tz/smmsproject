@@ -134,8 +134,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 except CustomUser.DoesNotExist:
                     raise serializers.ValidationError({"code": 107, "message": "Invalid student ID"})
 
+            title = f"Login Credentials"
             message = f"Hello {user.first_name}, your account was created successfully. Use username {user.username} and password {password}."
-            Notification.objects.create(recipient=user, type='reminder', message=message)
+            Notification.objects.create(recipient=user,title=title, type='reminder', message=message)
         return user
 
     # Edit user

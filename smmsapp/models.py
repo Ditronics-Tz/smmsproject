@@ -149,6 +149,7 @@ class Notification(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     recipient = models.ForeignKey(CustomUser, on_delete=models.CASCADE)  # Allow all users, not just parents
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, null=True, blank=True)  # Optional
+    title = models.CharField(max_length=100, null=True, blank=True)
     message = models.TextField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     retry_count = models.IntegerField(default=0)

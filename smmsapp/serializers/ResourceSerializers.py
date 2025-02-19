@@ -154,7 +154,20 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         control_number = self.generate_control_number()
         validated_data['control_number'] = control_number
-        return RFIDCard.objects.create(is_active=False, **validated_data)
+        rfid = RFIDCard.objects.create(is_active=False, **validated_data)
+
+        # Notify parent
+        parents = ParentStudent.objects.filter(student=rfid.student)
+        for parent_entry in parents:
+            Notification.objects.create(
+                title=f"{rfid.student.first_name}'s Card Creation",
+                recipient=parent_entry.parent,
+                message=f"Your {rfid.student.first_name} {rfid.student.last_name}'s meal card is created. \nCard Number: {rfid.card_number}, \nControl Number: {rfid.control_number}, \nBalance: Tsh. {rfid.balance}.",
+                status='pending',
+                type='reminder'
+            )
+        
+        return rfid
 
      # Update RFID Card (Prevents control_number changes)
     def update(self, instance, validated_data):
@@ -168,7 +181,7 @@ class NotificationSerializer(serializers.ModelSerializer):
     recipient = serializers.SerializerMethodField()
     class Meta:
         model = Notification
-        fields = ['id', 'message', 'status', 'type', 'created_at', 'recipient']
+        fields = ['id', 'message', 'status', 'title', 'type', 'created_at', 'recipient']
 
     def get_recipient(self,obj):
         return f'{obj.recipient.first_name} {obj.recipient.last_name}'

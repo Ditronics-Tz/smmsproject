@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>End of Day Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { width: 90%; margin: auto; }
+        h2 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>SMMS - End of Day Report</h2>
+        <p><strong>Date:</strong> {{ today }}</p>
+        <p><strong>Total Start Balance:</strong> {{ total_start_balance|floatformat:2 }}</p>
+        <p><strong>Total Sales Amount:</strong> {{ total_expenditure|floatformat:2 }}</p>
+        <p><strong>Total Remaining Balance:</strong> {{ total_remaining_balance|floatformat:2 }}</p>
+
+        <h3>Transactions</h3>
+        <table>
+            <tr>
+                <th>S/N</th>
+                <th>Student Name</th>
+                <th>Item</th>
+                <th>Time</th>
+                <th>Amount</th>
+                <th>Status</th>
+            </tr>
+            {% for transaction in transactions %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ transaction.student.first_name }} {{ transaction.student.last_name }}</td>
+                <td>{{ transaction.item.name }}</td>
+                <td>{{ transaction.transaction_date|date:"H:i:s" }}</td>
+                <td>{{ transaction.amount|floatformat:2 }}</td>
+                <td>{{ transaction.transaction_status }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+</html>

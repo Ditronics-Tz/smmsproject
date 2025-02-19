@@ -122,7 +122,7 @@ class InactiveUserListView(APIView, PageNumberPagination):
 class StudentDetailView(generics.RetrieveAPIView):
     queryset = CustomUser.objects.filter(role='student')
     serializer_class = FullStudentSerializer,
-    permission_class = [IsAdminOrParent]
+    permission_classes = [IsAdminOrParent]
 
     def post(self, request, *args, **kwargs):
         if not request.user.is_authenticated or request.user.role not in ['admin','parent']:
@@ -148,7 +148,7 @@ class StudentDetailView(generics.RetrieveAPIView):
 class ParentDetailView(generics.RetrieveAPIView):
     queryset = CustomUser.objects.filter(role='parent')
     serializer_class = FullParentSerializer,
-    permission_class = [IsAdminOnly]
+    permission_classes = [IsAdminOnly]
 
     def post(self, request, *args, **kwargs):
         if not request.user.is_authenticated or request.user.role != 'admin':
@@ -178,7 +178,7 @@ class ParentDetailView(generics.RetrieveAPIView):
 class OperatorDetailView(generics.RetrieveAPIView):
     queryset = CustomUser.objects.filter(role='operator')
     serializer_class = FullOperatorSerializer,
-    permission_class = [IsAdminOnly]
+    permission_classes = [IsAdminOnly]
 
     def post(self, request, *args, **kwargs):
         if not request.user.is_authenticated or request.user.role != 'admin':

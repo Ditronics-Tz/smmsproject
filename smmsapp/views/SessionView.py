@@ -49,6 +49,7 @@ class ScanRFIDCardView(APIView):
 
        # Check if student has exceeded 10 insufficient meals
         if rfid_card.insufficient_meal_count >= 10:
+            title = f"{student.first_name}'s Card Blocked"
             message = f"Your child {student.first_name} does not get meal today because insuficient balance execeeded 10 times, Please recharge for your child to get a meal. Available Balance is {rfid_card.balance}"
             return Response({'code': 118, 'message': 'Meal denied. Student exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -56,12 +57,14 @@ class ScanRFIDCardView(APIView):
         if rfid_card.balance >= item.price:
             rfid_card.balance -= item.price
             trans_status = 'successful'
+            title = f"Transaction Report"
             message = f"Your child {student.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
         else:
             # Allow the meal but apply penalty (-500)
             rfid_card.balance -= (item.price + 500)  
             rfid_card.insufficient_meal_count += 1
             trans_status = 'penalt'
+            title = f"WARNING: Transaction Penalt"
             message = f"Your child {student.first_name} card has purchase {item.name} with price {item.price} and penalt of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalts"
 
         rfid_card.save()
@@ -87,6 +90,7 @@ class ScanRFIDCardView(APIView):
         parents = ParentStudent.objects.filter(student=student)
         for parent_entry in parents:
             Notification.objects.create(
+                title=title,
                 recipient=parent_entry.parent,
                 transaction=transaction,
                 message=message,
