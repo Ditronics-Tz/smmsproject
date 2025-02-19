@@ -13,7 +13,7 @@ from ..permissions.CustomPermissions import IsAdminOrParent, IsAdminOnly
 
 # ----- API FOR GET SCHOOL -----
 class SchoolListView(APIView, PageNumberPagination):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
     page_size = 50
 
     def post(self, request, *args, **kwargs):
