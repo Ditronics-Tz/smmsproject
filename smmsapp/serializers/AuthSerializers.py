@@ -1,3 +1,5 @@
+import json
+from uuid import UUID
 from rest_framework import serializers
 from ..models import CustomUser, School
 from django.db.models import Q
@@ -47,7 +49,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     profile_picture = serializers.ImageField(write_only=True, required=False)
 
    # Accept multiple parent IDs when creating a student
-    parent_ids = serializers.ListField( child=serializers.UUIDField(), write_only=True, required=False)
+    parent_ids = serializers.ListField(child=serializers.UUIDField(), write_only=True, required=False)
     
     # Accept multiple student IDs when creating a parent
     student_ids = serializers.ListField(child=serializers.UUIDField(), write_only=True, required=False)
@@ -144,10 +146,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
         role = validated_data.pop('role')
         student_ids = validated_data.pop('student_ids', [])
         parent_ids = validated_data.pop('parent_ids', [])
-        user = None 
+        user = None
 
         if role == 'student':
             user = super().update(instance, validated_data)
+
+            # Clear existing parents first (to avoid duplicates)
+            ParentStudent.objects.filter(student=user).delete()
 
             # If `parent_id` is provided, link parent to student
             for parent_id in parent_ids:
@@ -160,13 +165,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
         else:
             user = super().update(instance, validated_data)
 
-            # If `student_id` is provided, link student to parent
+            # Clear existing students first (to avoid duplicates)
+            ParentStudent.objects.filter(parent=user).delete()
+
+            # Add new students
             for student_id in student_ids:
                 try:
                     student = CustomUser.objects.get(id=student_id, role='student')
                     ParentStudent.objects.update_or_create(parent=user, student=student)
                 except CustomUser.DoesNotExist:
                     raise serializers.ValidationError({"code": 107, "message": "Invalid student ID"})
+                
         return user
 
 
