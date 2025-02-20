@@ -8,7 +8,7 @@ def user_profile_path(instance, filename):
     """Generate file path for profile picture"""
     ext = filename.split('.')[-1]
     filename = f"profile_pics/{instance.id}.{ext}"
-    return os.path.join('uploads/', filename)
+    return filename
 
 # ------ SCHOOL TABLE ------
 class School(models.Model):

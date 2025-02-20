@@ -181,7 +181,7 @@ class LastSessionDetailsView(APIView):
 class ParentStudentsView(APIView):
     permission_classes = [IsAdminOrParent]
 
-    def get(self, request):
+    def post(self, request):
         # Ensure user is a parent
         if request.user.role != "parent":
             return Response({"code": 403,"message": "Access denied. Only parents can access this."}, status=status.HTTP_403_FORBIDDEN)
@@ -193,4 +193,4 @@ class ParentStudentsView(APIView):
         # Serialize the student data
         serializer = FullStudentSerializer(students, many=True)
 
-        return Response(serializer.data, status=status.HTTP_403_FORBIDDEN)
+        return Response(serializer.data, status=status.HTTP_200_OK)
