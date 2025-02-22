@@ -24,6 +24,13 @@ class AllStudentListView(generics.ListAPIView):
     serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
     page_size = None
+    
+#  --- api to return all active students 
+class AllStaffListView(generics.ListAPIView):
+    queryset = CustomUser.objects.filter(role='staff', is_active=True)
+    serializer_class = StaffSerializer
+    permission_classes = [IsAuthenticated]
+    page_size = None
 
 # --- api to return all cards active
 class AllCardListView(generics.ListAPIView):

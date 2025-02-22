@@ -11,18 +11,18 @@ class ScanSessionSerializer(serializers.ModelSerializer):
 
 # ----- SCANNED DATA SERIALIZER ----
 class ScannedDataSerializer(serializers.ModelSerializer):
-    student_name = serializers.SerializerMethodField()
+    student_or_staff_name = serializers.SerializerMethodField()
     item_name = serializers.CharField(source="item.name", read_only=True)
     item_price = serializers.CharField(source="item.price", read_only=True)
     card_number = serializers.CharField(source="rfid_card.card_number", read_only=True)
 
     class Meta:
         model = ScannedData
-        fields = ['id', 'session', 'student_name', 'card_number', 'item_name', 'item_price', 'scanned_at']
+        fields = ['id', 'session', 'student_or_staff_name', 'card_number', 'item_name', 'item_price', 'scanned_at']
         read_only_fields = ['id', 'scanned_at']
 
     def get_student_name(self, obj):
-        return f"{obj.student.first_name} {obj.student.last_name}"
+        return f"{obj.student_or_staff.first_name} {obj.student_or_staff.last_name}"
     
 
 # ------ TRANSACTION SERIALIZER -----
@@ -35,6 +35,6 @@ class TransactionSerializer(serializers.ModelSerializer):
         fields = ['id','amount','student_name', 'card_number','item_name','transaction_date','transaction_status']
 
     def get_student_name(self, obj):
-        return f'{obj.student.first_name} {obj.student.last_name}'
+        return f'{obj.student_or_staff.first_name} {obj.student_or_staff.last_name}'
 
 

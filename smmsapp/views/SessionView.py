@@ -33,7 +33,7 @@ class ScanRFIDCardView(APIView):
         # Validate RFID Card
         try:
             rfid_card = RFIDCard.objects.get(card_number=card_number, is_active=True)
-            student = rfid_card.student
+            student_or_staff = rfid_card.student_or_staff
         except RFIDCard.DoesNotExist:
             return Response({'code': 115, 'message': 'Invalid or inactive RFID card'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -44,42 +44,53 @@ class ScanRFIDCardView(APIView):
             return Response({'code': 116, 'message': 'Invalid canteen item'}, status=status.HTTP_404_NOT_FOUND)
         
         # Check if student already purchase the item on same session
-        if ScannedData.objects.filter(session=session, student=student, rfid_card=rfid_card, item=item).exists():
+        if ScannedData.objects.filter(session=session, student_or_staff=student_or_staff, rfid_card=rfid_card, item=item).exists():
             return Response({'code': 119, "message": "Already purchase this item"}, status=status.HTTP_400_BAD_REQUEST)
 
        # Check if student has exceeded 10 insufficient meals
         if rfid_card.insufficient_meal_count >= 10:
-            title = f"{student.first_name}'s Card Blocked"
-            message = f"Your child {student.first_name} does not get meal today because insuficient balance execeeded 10 times, Please recharge for your child to get a meal. Available Balance is {rfid_card.balance}"
-            return Response({'code': 118, 'message': 'Meal denied. Student exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
+            if student_or_staff.role == 'student':
+                title = f"{student_or_staff.first_name}'s Card Blocked"
+                message = f"Your child {student_or_staff.first_name} does not get meal today because insuficient balance execeeded 10 times, Please recharge for your child to get a meal. Available Balance is {rfid_card.balance}"
+            else: 
+                title: f"Your Card Blocked"
+                message = f"Your card is blocked as you get penalt 10 times after insuficient balance in your account. Please recharge your account to unblock"
+            return Response({'code': 118, 'message': 'Meal denied. Customer exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
 
         # Deduct balance if sufficient funds
         if rfid_card.balance >= item.price:
             rfid_card.balance -= item.price
             trans_status = 'successful'
             title = f"Transaction Report"
-            message = f"Your child {student.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
+            if student_or_staff.role == 'student':
+                message = f"Your child {student_or_staff.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
+            else:
+                message = f"You purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}. If is not you contact with our support imidietly"
         else:
             # Allow the meal but apply penalty (-500)
             rfid_card.balance -= (item.price + 500)  
             rfid_card.insufficient_meal_count += 1
             trans_status = 'penalt'
             title = f"WARNING: Transaction Penalt"
-            message = f"Your child {student.first_name} card has purchase {item.name} with price {item.price} and penalt of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalts"
+            if student_or_staff.role == 'stundent':
+                message = f"Your child {student_or_staff.first_name} has purchase {item.name} with price {item.price} and penalt of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalts"
+            else:
+                message = f"Your purchase {item.name} with price {item.price} and penalt of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your card blocked, Please recharge to avoid further penalts"
+
 
         rfid_card.save()
 
         # Store scanned data
         scanned_data = ScannedData.objects.create(
             session=session,
-            student=student,
+            student=student_or_staff,
             rfid_card=rfid_card,
             item=item
         )
 
         # Log transaction
         transaction = Transaction.objects.create(
-            student=student,
+            student=student_or_staff,
             rfid_card=rfid_card,
             item=item,
             amount=item.price if rfid_card.balance >= item.price else (item.price + 500),
@@ -87,7 +98,7 @@ class ScanRFIDCardView(APIView):
         )
 
         # Notify parent
-        parents = ParentStudent.objects.filter(student=student)
+        parents = ParentStudent.objects.filter(student=student_or_staff)
         for parent_entry in parents:
             Notification.objects.create(
                 title=title,

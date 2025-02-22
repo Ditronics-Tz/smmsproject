@@ -4,7 +4,7 @@ from rest_framework import status
 
 class IsAdminOrParent(BasePermission):
     def has_permission(self, request, view):
-        if request.user.is_authenticated and request.user.role in ['admin','parent']:
+        if request.user.is_authenticated and request.user.role in ['admin','parent','staff']:
             return True
         return False
     

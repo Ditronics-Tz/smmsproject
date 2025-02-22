@@ -5,6 +5,7 @@ from datetime import date
 class CountsSerializer(serializers.Serializer):
     total_students = serializers.IntegerField()
     total_parents = serializers.IntegerField()
+    total_staffs = serializers.IntegerField()
     total_available_balance = serializers.DecimalField(max_digits=10, decimal_places=2)
     total_transactions = serializers.IntegerField()
     sessions = serializers.IntegerField()

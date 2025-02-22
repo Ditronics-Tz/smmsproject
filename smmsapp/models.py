@@ -1,5 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
 import uuid
 import os
 
@@ -7,15 +9,27 @@ import os
 def user_profile_path(instance, filename):
     """Generate file path for profile picture"""
     ext = filename.split('.')[-1]
-    filename = f"profile_pics/{instance.id}.{ext}"
+    filename = f"student_pics/{instance.first_name}_{instance.middle_name}_{instance.last_name}.{ext}" if instance.role == 'student' else f"staff_pics/{instance.first_name}_{instance.middle_name}_{instance.last_name}.{ext}"
     return filename
 
 # ------ SCHOOL TABLE ------
 class School(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    number = models.IntegerField(unique=True, blank=True, null=True)
     name = models.CharField(max_length=255, unique=True)
     location = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    
+# function to generate school number
+@receiver(pre_save, sender=School)
+def set_number(sender, instance, **kwargs):
+    if instance.number is None:
+        last_instance = sender.objects.order_by('-number').first()
+        if last_instance and last_instance.number < 99:
+            instance.number = last_instance.number + 1
+        else:
+            instance.number = 10 
+    
 
 # -------- USER TABLE ----------
 class CustomUser(AbstractUser):
@@ -24,6 +38,7 @@ class CustomUser(AbstractUser):
         ('operator', 'Operator'),
         ('parent', 'Parent'),
         ('student', 'Student'),
+        ('staff','Staff')
     ]
 
     PARENT_TYPE_CHOICES = [
@@ -56,7 +71,7 @@ class CustomUser(AbstractUser):
 class RFIDCard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     card_number = models.CharField(max_length=50, unique=True)
-    student = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
+    student_or_staff = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
     control_number = models.CharField(max_length=50, unique=True)
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     insufficient_meal_count = models.PositiveIntegerField(default=0)  # Field to track insufficient meals
@@ -66,7 +81,8 @@ class RFIDCard(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Card: {self.card_number} - {self.student.username}"
+        return f"Card: {self.card_number} - {self.student_or_staff.first_name}"
+
 
 # ------ BANK_DEPOSIT TABLE
 class BankDeposit(models.Model):
@@ -78,7 +94,7 @@ class BankDeposit(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     control_number = models.ForeignKey(RFIDCard, on_delete=models.CASCADE, to_field='control_number')
-    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
+    # student_or_ = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     transaction_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
@@ -121,7 +137,7 @@ class Transaction(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
+    student_or_staff = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
     rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
     item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -129,7 +145,7 @@ class Transaction(models.Model):
     transaction_status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
 
     def __str__(self):
-        return f"{self.student.username} - {self.item.name} - ${self.amount}"
+        return f"{self.student_or_staff.username} - {self.item.name} - ${self.amount}"
 
 # ----- NOTIFICATION TABLE ------
 class Notification(models.Model):
@@ -189,10 +205,10 @@ class ScanSession(models.Model):
 class ScannedData(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(ScanSession, on_delete=models.CASCADE)  # Links to active session
-    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
+    student_or_staff = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
     rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
     item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE, null=True, blank=True)
     scanned_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.student.username} scanned at {self.scanned_at}"
+        return f"{self.student_or_staff.username} scanned at {self.scanned_at}"

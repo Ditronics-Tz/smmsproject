@@ -18,11 +18,11 @@ class SchoolListView(APIView, PageNumberPagination):
 
     def post(self, request, *args, **kwargs):
         search_query = request.data.get("search").strip()
-        school = School.objects.all().order_by('name')
+        school = School.objects.all().order_by('number')
 
         if search_query:
             school = school.filter(
-                Q(name__icontains=search_query) | Q(location__icontains=search_query)
+                Q(name__icontains=search_query) | Q(location__icontains=search_query) | Q(number__icontains=search_query) 
             )
         
         # Apply pagination
@@ -170,6 +170,36 @@ class ParentDetailView(generics.RetrieveAPIView):
         
         parent = get_object_or_404(CustomUser, id=parent_id, role = 'parent')
         serializer = FullParentSerializer(parent)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+# ----- API FOR FETCH STAFF DATA -----
+class StaffDetailView(generics.RetrieveAPIView):
+    queryset = CustomUser.objects.filter(role='staff')
+    serializer_class = FullStaffSerializer,
+    permission_classes = [IsAdminOnly]
+
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_authenticated or request.user.role != 'admin':
+            return Response(
+                {
+                    "code": 403,
+                    "message": "Access denied. Only admins can view parents details"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        staff_id = request.data.get("staff_id")
+
+        if not staff_id:
+            return Response({
+                "code": 104,
+                "message": "Parent id required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        staff = get_object_or_404(CustomUser, id=staff_id, role = 'staff')
+        serializer = FullStaffSerializer(staff)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -327,8 +357,8 @@ class CreateCardView(generics.CreateAPIView):
                 )
 
             # Check if student have a card
-            student = request.data.get("student")
-            if RFIDCard.objects.filter(student=student).exists():
+            student_or_staff = request.data.get("student_or_staff")
+            if RFIDCard.objects.filter(student_or_staff=student_or_staff).exists():
                 return Response({"code": 112, "message": "This student already have a card"},status=status.HTTP_400_BAD_REQUEST)
             
             # Check if card number already taken
@@ -341,7 +371,7 @@ class CreateCardView(generics.CreateAPIView):
             rfidcard = serializer.save() 
 
             return Response({
-                    "message": f"{rfidcard.student.first_name} card created successfully", "rfidcard": serializer.data}
+                    "message": f"{rfidcard.student_or_staff.first_name} card created successfully", "rfidcard": serializer.data}
                     ,status=status.HTTP_201_CREATED
                 )
         except Exception as e:
@@ -361,11 +391,11 @@ class EditCardView(generics.UpdateAPIView):
         
         # Extract `user_id` from request data
         card_id = request.data.get('card_id')
-        student = request.data.get('student')
+        student_or_staff = request.data.get('student_or_staff')
 
         # Check if card number already taken
         card_number = request.data.get("card_number")
-        if RFIDCard.objects.filter(card_number=card_number).exclude(student=student).exists():
+        if RFIDCard.objects.filter(card_number=card_number).exclude(student_or_staff=student_or_staff).exists():
             return Response({"code": 105, "message": "This card number already taken"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not card_id:

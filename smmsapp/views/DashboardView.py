@@ -23,6 +23,7 @@ class CountsView(APIView):
         
         total_students = CustomUser.objects.filter(role='student').count()
         total_parents = CustomUser.objects.filter(role='parent').count()
+        total_staffs = CustomUser.objects.filter(role='staff').count()
         total_available_balance = RFIDCard.objects.aggregate(total_balance=Sum('balance'))['total_balance'] or 0
         total_transactions = Transaction.objects.count() 
 
@@ -50,6 +51,7 @@ class CountsView(APIView):
         data = {
             "total_students": total_students,
             "total_parents": total_parents,
+            "total_staffs": total_staffs,
             "total_available_balance": total_available_balance,
             "total_transactions": total_transactions,
             "sessions": total_sessions,
@@ -164,7 +166,7 @@ class LastSessionDetailsView(APIView):
         total_price = scanned_data.aggregate(Sum('item__price'))['item__price__sum'] or 0
 
         # Count number of students scanned
-        student_count = scanned_data.values('student').distinct().count()
+        student_count = scanned_data.values('student_or_staff').distinct().count()
 
         return Response({
             "session_id": str(last_session.id),
