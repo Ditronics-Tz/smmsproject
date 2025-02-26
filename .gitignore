@@ -1,0 +1,16 @@
+uploads/uploads/*
+db.sqlite3
+__pycach__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv
+.env
+server-setup.txt
+*.rdb
+smms-project-304ac-firebase-adminsdk-fbsvc-54c852dcec.json
+*.db
+send_pending_logs.log
+*.log
+uploads/
