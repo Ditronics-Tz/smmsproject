@@ -12,6 +12,7 @@ urlpatterns = [
     path('parent-details', ParentDetailView.as_view(), name='parent-details'),
     path('operator-details', OperatorDetailView.as_view(), name='operator_details'),
     path('admin-details', AdminDetailsView.as_view(), name='admin-details'),
+    path('staff-details', StaffDetailView.as_view(), name='staff-details'),
 
     # School Urls
     path('school-list/', SchoolListView.as_view(), name='school-list'),

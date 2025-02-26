@@ -254,6 +254,9 @@ class TransactionListView(APIView, PageNumberPagination):
             children = [parent_student.student for parent_student in parent_students]
             # Filter transactions for those students
             transactions = Transaction.objects.filter(student_or_staff__in=children).order_by('-transaction_date')
+        # Parents can only see transactions for their children
+        elif user.role == 'staff':
+            transactions = Transaction.objects.filter(student_or_staff=user).order_by('-transaction_date')
         else:
             return Response({'code': 403, 'message': 'Unauthorized access'}, status=status.HTTP_403_FORBIDDEN)
         

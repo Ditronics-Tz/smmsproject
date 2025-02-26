@@ -25,7 +25,7 @@ class AllStudentListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     page_size = None
     
-#  --- api to return all active students 
+#  --- api to return all active staff 
 class AllStaffListView(generics.ListAPIView):
     queryset = CustomUser.objects.filter(role='staff', is_active=True)
     serializer_class = StaffSerializer

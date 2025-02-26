@@ -10,6 +10,4 @@ urlpatterns = [
     path('activate-deactivate-user', ActivateDeactivateUserView.as_view(), name='activate-deactivate-user'),
     path('logout', LogoutView.as_view(), name='logout'),
     path('token/refresh', TokenRefreshView.as_view(), name='token_refresh'),
-    
-    
 ]

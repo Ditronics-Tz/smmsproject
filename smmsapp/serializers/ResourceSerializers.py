@@ -16,7 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
     school = serializers.CharField(source='school.name',read_only=True)
     class Meta: 
         model = CustomUser
-        fields = ['id','first_name','middle_name','is_active', 'last_name','username','parent_type','gender','email','mobile_number','class_room','school','profile_picture','date_joined']
+        fields = ['id','first_name','middle_name','is_active','role', 'last_name','username','parent_type','gender','email','mobile_number','class_room','school','profile_picture','date_joined']
 
 
 # ------ STUDENT INFO ----
@@ -65,7 +65,7 @@ class ScanSessionSerializer(serializers.ModelSerializer):
 
 # ------ RFID Card INFO -----
 class RFIDCardSerializer(serializers.ModelSerializer):
-    student_or_staff = StudentSerializer(read_only=True)
+    student_or_staff = UserSerializer(read_only=True)
     class Meta:
         model = RFIDCard
         fields = ['id','balance', 'is_active','control_number','card_number','issued_date','student_or_staff', 'created_at']
@@ -109,8 +109,8 @@ class FullStaffSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['id','first_name','middle_name', 'transactions',  'last_name','gender',
-                  'school', 'school_id','profile_picture', 'rfid_card']
+        fields = ['id','first_name','middle_name', 'last_name','gender', 'email', 'username', 'mobile_number',
+                  'school', 'school_id','profile_picture', 'rfid_card', 'transactions', ]
         
     def get_transactions(self, obj):
         transactions = Transaction.objects.filter(student_or_staff=obj).order_by('-transaction_date')[:10]
@@ -160,10 +160,9 @@ class FullAdminSerializer(serializers.ModelSerializer):
 
 # ----- CREATE RFID CARD -----
 class CreateRFIDCardSerializer(serializers.ModelSerializer):
-    school_number = serializers.IntegerField()
     class Meta:
         model = RFIDCard
-        fields = ['id', 'balance', 'student_or_staff', 'is_active','school_number', 'control_number', 'card_number', 'issued_date']
+        fields = ['id', 'balance', 'student_or_staff', 'is_active', 'control_number', 'card_number', 'issued_date']
         read_only_fields = ['control_number']  # Ensure control_number isn't required in requests
 
     # Generate control number automatically
@@ -177,7 +176,15 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
 
     # Create a new RFID card
     def create(self, validated_data):
-        school_number = validated_data.pop('school_number')
+        student_or_staff = validated_data.get('student_or_staff')
+
+        # Ensure the student_or_staff has a school assigned
+        if student_or_staff and student_or_staff.school:
+            school_number = student_or_staff.school.number  # Get the school number
+        else:
+            raise serializers.ValidationError({"school_number": "Student or staff must belong to a school."})
+
+        # school_number = validated_data.pop('school_number')
         control_number = self.generate_control_number(school_number)
         validated_data['control_number'] = control_number
         rfid = RFIDCard.objects.create(is_active=False, **validated_data)
@@ -189,7 +196,7 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
                 Notification.objects.create(
                     title=f"{rfid.student_or_staff.first_name}'s Card Creation",
                     recipient=parent_entry.parent,
-                    message=f"Your {rfid.student.first_name} {rfid.student.last_name}'s meal card is created. \nCard Number: {rfid.card_number}, \nControl Number: {rfid.control_number}, \nBalance: Tsh. {rfid.balance}.",
+                    message=f"Your {rfid.student_or_staff.first_name} {rfid.student_or_staff.last_name}'s meal card is created. \nCard Number: {rfid.card_number}, \nControl Number: {rfid.control_number}, \nBalance: Tsh. {rfid.balance}.",
                     status='pending',
                     type='reminder'
                 )

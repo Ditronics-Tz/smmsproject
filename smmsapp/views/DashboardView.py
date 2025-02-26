@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated, IsAdminUser
 
-from ..serializers.ResourceSerializers import FullStudentSerializer, StudentSerializer
+from ..serializers.ResourceSerializers import FullStudentSerializer, StudentSerializer, FullStaffSerializer
 
 from ..utils import generate_end_of_day_report, generate_parent_end_of_day_report
 from ..models import ParentStudent, RFIDCard, Transaction, CustomUser, ScanSession, ScannedData
@@ -194,5 +194,23 @@ class ParentStudentsView(APIView):
 
         # Serialize the student data
         serializer = FullStudentSerializer(students, many=True)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# API FOR RETURN STAFF'S DETAILS
+class StaffView(APIView):
+    permission_classes = [IsAdminOrParent]
+
+    def post(self, request):
+        # Ensure user is a staff
+        if request.user.role != "staff":
+            return Response({"code": 403,"message": "Access denied. Only staff can access this."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get staff
+        staff = request.user
+
+        # Serialize the student data
+        serializer = FullStaffSerializer(staff)
 
         return Response(serializer.data, status=status.HTTP_200_OK)

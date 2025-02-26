@@ -29,7 +29,7 @@ AUTH_USER_MODEL = 'smmsapp.CustomUser'
 SECRET_KEY = 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     'localhost', 
