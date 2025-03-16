@@ -5,8 +5,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q
+import random
+import string
 from ..serializers.AuthSerializers import UserCreateSerializer, AuthUserSerializer, LoginSerializer
-from ..models import CustomUser as User, RFIDCard
+from ..models import CustomUser as User, RFIDCard, Notification
 from ..permissions.CustomPermissions import IsAdminOnly, IsAdminOrParent
 
 # Generate JWT tokens for user
@@ -57,15 +59,18 @@ class LoginView(APIView):
 # User Logout API (Blacklist Token)
 class LogoutView(APIView):
     permission_classes = [AllowAny]
-    queryset = User.objects.all()
+    # queryset = User.objects.all()
 
     def post(self, request, *args, **kwargs):
+        refresh_token = request.data.get("refresh")
+        if not refresh_token:
+            return Response({"error": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            refresh_token = request.data["refresh"]
             token = RefreshToken(refresh_token)
             token.blacklist()
             return Response({"message": "Logged out successfully"}, status=status.HTTP_205_RESET_CONTENT)
-        except Exception as e:
+        except Exception:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -145,6 +150,7 @@ class EditUserView(generics.UpdateAPIView):
 # API FOR ACTIVATE AND DEACTIVATE USER
 class ActivateDeactivateUserView(APIView):
     permission_classes = [IsAdminOnly]
+    queryset = User.objects.all()
 
     def post(self, request, *args, **kwargs):
         try:
@@ -177,6 +183,74 @@ class ActivateDeactivateUserView(APIView):
 
             user.save()
             return Response({"message": message, "card_id": user_id, "is_active": user.is_active}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"code": 500, "message": f"General System error - {e}"})
+
+# FORGET PASSWORD VIEW
+class ForgetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    queryset = User.objects.all()
+
+    # Generate strong password
+    def generate_password(self, last_name):
+        """Generate a strong random password."""
+        digits = string.digits
+        special_chars = "!@#$%&*"  # Limit special characters
+
+        password = [
+            random.choice(digits),
+            random.choice(special_chars)
+        ]
+
+        all_chars = digits + special_chars
+        password += random.choices(all_chars, k=1)  # Ensure 8-character length
+        random.shuffle(password)
+
+        return f'{last_name}{"".join(password)}'
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'code': 123, 'message': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'code': 124, 'message': 'User with this email does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+
+        password = self.generate_password(user.last_name)
+        user.set_password(password)
+        user.save()
+
+        title = f"Reset Password"
+        message = f"Hello {user.first_name}, your password was reset successfully. Your new password is {password}."
+        Notification.objects.create(recipient=user,title=title, type='reminder', message=message)
+
+        return Response({'message': 'Password reset link sent to your email.'}, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+    queryset = User.objects.all()
+
+    def post(self, request):
+        try:
+            old_password = request.data.get("old_password")
+            new_password = request.data.get("new_password")
+
+            if not old_password and not new_password:
+                Response({'code': 126, 'message': 'Old password and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = authenticate(username=request.user.username, password=old_password)
+            if user is None:
+                return Response({'code': 127,'message': 'Old password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.set_password(new_password)
+            user.save()
+
+            return Response({'message': 'Password changed successfully.'}, status=status.HTTP_200_OK)
+
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
