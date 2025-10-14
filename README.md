@@ -25,8 +25,8 @@ Ensure you have the following installed:
 
 ### Clone the Repository
 ```bash
-git clone https://github.com/yourusername/student-meal-management.git
-cd student-meal-management
+git clone https://github.com/Ditronics-Tz/smmsproject.git
+cd smmsproject
 ```
 
 ### Setup Environment Variables

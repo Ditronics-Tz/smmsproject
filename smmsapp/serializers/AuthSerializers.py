@@ -16,7 +16,7 @@ class AuthUserSerializer(serializers.ModelSerializer):
     school = SchoolSerializer()
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'mobile_number', 'role', 'profile_picture', 'first_name', 'last_name', 'is_superuser', 'school']
+        fields = ['id', 'username', 'email', 'mobile_number', 'role', 'profile_picture', 'first_name', 'middle_name', 'last_name', 'is_superuser', 'school']
 
 #  ----- LOGIN SERIALIZER ----- 
 class LoginSerializer(serializers.Serializer):

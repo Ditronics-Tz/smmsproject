@@ -9,7 +9,14 @@ import os
 def user_profile_path(instance, filename):
     """Generate file path for profile picture"""
     ext = filename.split('.')[-1]
-    filename = f"student_pics/{instance.first_name}_{instance.middle_name}_{instance.last_name}.{ext}" if instance.role == 'student' else f"staff_pics/{instance.first_name}_{instance.middle_name}_{instance.last_name}.{ext}"
+
+    if instance.role == 'student':
+        filename = f"student_pics/{instance.first_name}_{instance.middle_name}_{instance.last_name}.{ext}" 
+    elif instance.role == 'staff':
+        filename = f"staff_pics/{instance.first_name}_{instance.middle_name}_{instance.last_name}.{ext}"
+    else:
+        filename = f"others/{instance.first_name}_{instance.middle_name}_{instance.last_name}.{ext}"
+
     return filename
 
 # ------ SCHOOL TABLE ------

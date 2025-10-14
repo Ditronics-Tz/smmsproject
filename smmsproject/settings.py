@@ -29,7 +29,7 @@ AUTH_USER_MODEL = 'smmsapp.CustomUser'
 SECRET_KEY = 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = [
     'localhost', 
@@ -42,6 +42,7 @@ ALLOWED_HOSTS = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "http://ditronics.co.tz:8000",
     "http://diatronis.co.tz:3000",
     "https://adhimkitchen.ditronics.co.tz",
@@ -147,7 +148,7 @@ DATABASES = {
         'NAME': 'smmsdb',
         'USER': 'postgres',
         'PASSWORD': '123456789',
-        'HOST': 'localhost',
+        'HOST': os.getenv('DB_HOST','localhost'),
         'PORT': '5432',
     }
 }
