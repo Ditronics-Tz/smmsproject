@@ -1,0 +1,124 @@
+# ============================================================================
+# Docker Compose Configuration for Production
+# ============================================================================
+# This configuration provides:
+# - Gunicorn WSGI server (no Django dev server)
+# - No volume mounts for code (baked into image)
+# - Environment variables for production settings
+# - Optimized for performance and security
+# ============================================================================
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database - Production settings
+  db:
+    container_name: smms_db_prod
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    # Don't expose ports in production - only accessible via network
+
+  # Redis - Production settings
+  redis:
+    container_name: smms_redis_prod
+    restart: unless-stopped
+    # Don't expose ports in production
+
+  # Django Web Application - Production with Gunicorn
+  web:
+    container_name: smms_web_prod
+    restart: unless-stopped
+    # Override command to use Gunicorn instead of runserver
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput --clear &&
+             gunicorn smmsproject.wsgi:application 
+             --bind 0.0.0.0:8000 
+             --workers 3 
+             --threads 2 
+             --worker-class sync 
+             --worker-tmp-dir /dev/shm 
+             --max-requests 1000 
+             --max-requests-jitter 50 
+             --timeout 60 
+             --graceful-timeout 30 
+             --keep-alive 5 
+             --log-level info 
+             --access-logfile - 
+             --error-logfile -"
+    # Remove volume mounts - code is baked into image
+    volumes: []
+    ports:
+      # Bind to localhost only for security - use nginx as reverse proxy
+      - "127.0.0.1:8000:8000"
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE=postgres
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=smmsproject.settings
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
+      - FIREBASE_SENDER_ID=${FIREBASE_SENDER_ID}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/admin/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Celery Worker - Production settings
+  celery:
+    container_name: smms_celery_prod
+    restart: unless-stopped
+    command: celery -A smmsproject worker --loglevel=info --concurrency=2
+    volumes: []
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE=postgres
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=smmsproject.settings
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
+      - FIREBASE_SENDER_ID=${FIREBASE_SENDER_ID}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+
+  # Celery Beat - Production settings
+  celery-beat:
+    container_name: smms_celery_beat_prod
+    restart: unless-stopped
+    command: celery -A smmsproject beat --loglevel=info
+    volumes: []
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE=postgres
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=smmsproject.settings

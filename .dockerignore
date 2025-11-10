@@ -1,0 +1,93 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+virtualenv/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+*.pot
+*.pyc
+*.pyo
+*.pyd
+
+# Media and uploads (if not needed in image)
+uploads/
+media/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+tmp/
+temp/
+
+# Firebase credentials
+*.json
+smms-project-304ac-firebase-adminsdk-fbsvc-54c852dcec.json
+
+# Redis dumps
+*.rdb
+
+# Logs
+send_pending_logs.log
+server-setup.txt
+
+# Docker files (don't copy into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Static files (will be collected in container)
+/static/
+staticfiles/

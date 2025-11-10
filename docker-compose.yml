@@ -1,0 +1,150 @@
+# ============================================================================
+# Docker Compose Configuration for Development
+# ============================================================================
+# This configuration provides:
+# - Hot-reload for code changes (volume mount)
+# - PostgreSQL database
+# - Redis for Celery
+# - Port binding to localhost only (127.0.0.1:8000)
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: smms_db_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${DB_NAME:-smmsdb}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-123456789}
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smms_network
+
+  # Redis for Celery
+  redis:
+    image: redis:7-alpine
+    container_name: smms_redis_dev
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smms_network
+
+  # Django Web Application
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: smms_web_dev
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      # Mount entire project for hot-reload in development
+      - .:/app
+      # Preserve node_modules and venv if they exist
+      - /app/venv
+      - /app/.venv
+    ports:
+      # Bind to localhost only for security
+      - "127.0.0.1:8000:8000"
+    environment:
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - DATABASE=postgres
+      - DB_NAME=${DB_NAME:-smmsdb}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-123456789}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=smmsproject.settings
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - smms_network
+    stdin_open: true
+    tty: true
+
+  # Celery Worker
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: smms_celery_dev
+    command: celery -A smmsproject worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - DATABASE=postgres
+      - DB_NAME=${DB_NAME:-smmsdb}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-123456789}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=smmsproject.settings
+    depends_on:
+      - db
+      - redis
+      - web
+    networks:
+      - smms_network
+
+  # Celery Beat (Scheduler)
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: smms_celery_beat_dev
+    command: celery -A smmsproject beat --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - DATABASE=postgres
+      - DB_NAME=${DB_NAME:-smmsdb}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-123456789}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=smmsproject.settings
+    depends_on:
+      - db
+      - redis
+      - web
+    networks:
+      - smms_network
+
+networks:
+  smms_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
