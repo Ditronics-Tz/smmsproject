@@ -39,9 +39,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r /tmp/requirements.txt && \
-    pip install gunicorn whitenoise
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r /tmp/requirements.txt && \
+    pip install --no-cache-dir gunicorn whitenoise
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image
