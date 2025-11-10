@@ -26,19 +26,12 @@ AUTH_USER_MODEL = 'smmsapp.CustomUser'
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = [
-    'localhost', 
-    '127.0.0.1', 
-    'ditronics.co.tz', 
-    'adhimkitchen.ditronics.co.tz', 
-    'www.adhimkitchen.ditronics.co.tz',
-    'backend1.ditronics.co.tz'
-]
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,ditronics.co.tz,adhimkitchen.ditronics.co.tz,www.adhimkitchen.ditronics.co.tz,backend1.ditronics.co.tz').split(',')
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -81,7 +74,7 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # --- for message engine
-CELERY_BROKER_URL = 'redis://localhost:6379/0'  
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')  
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 
@@ -113,6 +106,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add WhiteNoise for static files
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -145,11 +139,11 @@ WSGI_APPLICATION = 'smmsproject.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smmsdb',
-        'USER': 'postgres',
-        'PASSWORD': '123456789',
-        'HOST': os.getenv('DB_HOST','localhost'),
-        'PORT': '5432',
+        'NAME': os.getenv('DB_NAME', 'smmsdb'),
+        'USER': os.getenv('DB_USER', 'postgres'),
+        'PASSWORD': os.getenv('DB_PASSWORD', '123456789'),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
 
@@ -214,8 +208,18 @@ USE_TZ = True
 MEDIA_URL = "/uploads/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "uploads")
 
-STATIC_URL="/static/"
-STATIC_ROOT=os.path.join(BASE_DIR,"/static")
+STATIC_URL = "/static/"
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
+
+# WhiteNoise configuration for production static file serving
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
