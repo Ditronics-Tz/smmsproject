@@ -29,18 +29,20 @@ AUTH_USER_MODEL = 'smmsapp.CustomUser'
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+# Fail-safe: DEBUG defaults to False. A missing/unset DEBUG env var must NOT
+# silently enable debug mode. Dev environments set DEBUG=True explicitly.
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,ditronics.co.tz,adhimkitchen.ditronics.co.tz,www.adhimkitchen.ditronics.co.tz,backend1.ditronics.co.tz').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Origin lists are read from the environment so each deployment (staging vs
+# prod) ships its own explicit list. Changing the lists requires no code edit.
+# Values are comma-separated; an empty/unset var yields an empty list (closed by default).
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://ditronics.co.tz:8000",
-    "http://diatronis.co.tz:3000",
-    "https://adhimkitchen.ditronics.co.tz",
-    "https://www.adhimkitchen.ditronics.co.tz",
-    "https://backend1.ditronics.co.tz"
+    o for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o
+]
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o
 ]
 
 CORS_ALLOW_ALL_ORIGINS = False
@@ -49,11 +51,18 @@ CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication crede
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-CSRF_TRUSTED_ORIGINS = ["https://31.220.82.177","https://backend1.ditronics.co.tz"]
+# HTTPS considerations:
+#  - Nginx terminates TLS at the edge and redirects HTTP->HTTPS, so the app does
+#    not force its own redirect. Keep SECURE_SSL_REDIRECT off behind that proxy;
+#    enable it only when the app itself terminates TLS.
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
+if os.getenv('SECURE_HSTS_SECONDS', ''):
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'True') == 'True'
+    SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'True') == 'True'
 
-SECURE_SSL_REDIRECT = False # Redirects all HTTP traffic to HTTPS
-SESSION_COOKIE_SECURE = True  # Ensures session cookies are only sent over HTTPS
-CSRF_COOKIE_SECURE = True  # Ensures CSRF cookies are only sent over HTTPS
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True') == 'True'  # HTTPS only
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'True') == 'True'  # HTTPS only
 
 # Load environment variables from .env file
 load_dotenv()
@@ -176,7 +185,16 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 5
+    'PAGE_SIZE': 5,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',             # global anonymous ceiling
+        'login': '5/min',             # brute-force / credential-enumeration guard
+        'forget_password': '3/min',   # account-enumeration guard
+    },
 }
 
 # ---- ACCESS AND REFRESH TOKEN -----

@@ -140,7 +140,7 @@ class Transaction(models.Model):
         ('pending', 'Pending'),
         ('successful', 'Successful'),
         ('failed', 'Failed'),
-        ('penalt', 'Penalt')
+        ('penalty', 'Penalty')
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

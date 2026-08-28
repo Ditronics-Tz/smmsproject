@@ -21,11 +21,11 @@ from . import settings
 
 urlpatterns = [
     path('admin-auth/', admin.site.urls),
-    path('',include('smmsapp.urls.adminUrls')),
+    path('',include('smmsapp.urls.admin')),
     path('api-auth/', include('rest_framework.urls')),
-    path('auth/', include('smmsapp.urls.authUrls')),
-    path('dashboard/', include('smmsapp.urls.dashboardUrls')),
-    path('resources/', include("smmsapp.urls.resourceUrls")),
-    path('sessions/', include("smmsapp.urls.sessionUrls")),
-    path('list/',include("smmsapp.urls.listUrls")),
+    path('auth/', include('smmsapp.urls.auth')),
+    path('dashboard/', include('smmsapp.urls.dashboard')),
+    path('resources/', include("smmsapp.urls.resources")),
+    path('sessions/', include("smmsapp.urls.sessions")),
+    path('list/',include("smmsapp.urls.lists")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -22,7 +22,8 @@ services:
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-123456789}
     ports:
-      - "127.0.0.1:5432:5432"
+      # Host port 5439 avoids conflicting with the host-native PostgreSQL on 5432
+      - "127.0.0.1:5439:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
@@ -36,7 +37,8 @@ services:
     image: redis:7-alpine
     container_name: smms_redis_dev
     ports:
-      - "127.0.0.1:6379:6379"
+      # Host port 6380 avoids conflicting with the host-native Redis on 6379
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -65,7 +67,7 @@ services:
       # Bind to localhost only for security
       - "127.0.0.1:8000:8000"
     environment:
-      - DEBUG=${DEBUG:-True}
+      - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
       - DATABASE=postgres
       - DB_NAME=${DB_NAME:-smmsdb}
@@ -75,6 +77,11 @@ services:
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
       - DJANGO_SETTINGS_MODULE=smmsproject.settings
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
+      - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-False}
+      - SECURE_HSTS_SECONDS=${SECURE_HSTS_SECONDS:-}
     depends_on:
       db:
         condition: service_healthy
@@ -96,7 +103,7 @@ services:
     volumes:
       - .:/app
     environment:
-      - DEBUG=${DEBUG:-True}
+      - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
       - DATABASE=postgres
       - DB_NAME=${DB_NAME:-smmsdb}
@@ -106,6 +113,11 @@ services:
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
       - DJANGO_SETTINGS_MODULE=smmsproject.settings
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
+      - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-False}
+      - SECURE_HSTS_SECONDS=${SECURE_HSTS_SECONDS:-}
     depends_on:
       - db
       - redis
@@ -124,7 +136,7 @@ services:
     volumes:
       - .:/app
     environment:
-      - DEBUG=${DEBUG:-True}
+      - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
       - DATABASE=postgres
       - DB_NAME=${DB_NAME:-smmsdb}
@@ -134,6 +146,11 @@ services:
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
       - DJANGO_SETTINGS_MODULE=smmsproject.settings
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
+      - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-False}
+      - SECURE_HSTS_SECONDS=${SECURE_HSTS_SECONDS:-}
     depends_on:
       - db
       - redis
