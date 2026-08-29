@@ -14,7 +14,14 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 from celery.schedules import crontab
+
+# Load environment variables from the .env file FIRST so that every setting
+# below reads the real (rotated) values. Placing this here rather than further
+# down fixes a bug where SECRET_KEY and DB_PASSWORD were read before .env was
+# loaded, silently falling back to committed defaults.
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,8 +32,25 @@ AUTH_USER_MODEL = 'smmsapp.CustomUser'
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
+
+def require_env(name: str) -> str:
+    """Read a required env var, failing loudly if it is missing or empty.
+
+    Used for secrets that MUST NOT fall back to a default. A misconfigured
+    deployment should refuse to start rather than silently run with a
+    publicly-known key or password.
+    """
+    value = os.getenv(name)
+    if not value:
+        raise ImproperlyConfigured(
+            f"Missing required environment variable: {name}"
+        )
+    return value
+
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@')
+# No default: the service refuses to start unless SECRET_KEY is provided.
+SECRET_KEY = require_env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Fail-safe: DEBUG defaults to False. A missing/unset DEBUG env var must NOT
@@ -63,9 +87,6 @@ if os.getenv('SECURE_HSTS_SECONDS', ''):
 
 SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True') == 'True'  # HTTPS only
 CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'True') == 'True'  # HTTPS only
-
-# Load environment variables from .env file
-load_dotenv()
 
 # ---- FIREBASE SETUP
 FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY')
@@ -150,7 +171,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('DB_NAME', 'smmsdb'),
         'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', '123456789'),
+        'PASSWORD': require_env('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }

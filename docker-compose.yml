@@ -20,7 +20,7 @@ services:
     environment:
       - POSTGRES_DB=${DB_NAME:-smmsdb}
       - POSTGRES_USER=${DB_USER:-postgres}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-123456789}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
     ports:
       # Host port 5439 avoids conflicting with the host-native PostgreSQL on 5432
       - "127.0.0.1:5439:5432"
@@ -68,11 +68,11 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       - DEBUG=${DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY}
       - DATABASE=postgres
       - DB_NAME=${DB_NAME:-smmsdb}
       - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-123456789}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=db
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -104,11 +104,11 @@ services:
       - .:/app
     environment:
       - DEBUG=${DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY}
       - DATABASE=postgres
       - DB_NAME=${DB_NAME:-smmsdb}
       - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-123456789}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=db
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -137,11 +137,11 @@ services:
       - .:/app
     environment:
       - DEBUG=${DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY}
       - DATABASE=postgres
       - DB_NAME=${DB_NAME:-smmsdb}
       - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-123456789}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=db
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
