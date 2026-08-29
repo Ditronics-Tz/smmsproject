@@ -30,6 +30,7 @@ urlpatterns = [
     path('edit-card', EditCardView.as_view(), name='edit-card'),
     path('card-list/', CardListView.as_view(), name='card-list'),
     path('card-details', CardDetailsView.as_view(), name='card-details'),
+    path('delete-card', DeleteCardView.as_view(), name='delete-card'),
     path('activate-deactivate-card', ActivateDeactivateCardView.as_view(), name='activate-deactivate-card'),
 
     # notifications

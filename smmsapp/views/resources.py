@@ -59,7 +59,20 @@ class DeleteSchoolView(APIView):
             except School.DoesNotExist:
                 return Response({"code": 404, "message": "School not found"}, status=status.HTTP_404_NOT_FOUND)
 
-            # Delete the card
+            # Guard: CustomUser.school uses on_delete=SET_NULL, so a hard delete
+            # would silently strip every attached user (student/parent/operator/
+            # staff/admin) of their school association with no warning or audit
+            # trail. Refuse the delete while anyone is still attached instead of
+            # silently orphaning them.
+            attached_count = CustomUser.objects.filter(school=school).count()
+            if attached_count > 0:
+                return Response({
+                    "code": 400,
+                    "message": f"Cannot delete school: {attached_count} user(s) are still attached. Move or remove them first.",
+                    "school_id": school_id,
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Delete the school
             school.delete()
             return Response({"message": "School deleted successfully.", "school_id": school_id}, status=status.HTTP_200_OK)
 
@@ -284,15 +297,25 @@ class DeleteItemView(APIView):
             if not item_id:
                 return Response({"code" : 104, "message": "Card ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Check if card exists
+            # Check if item exists
             try:
                 item = CanteenItem.objects.get(id=item_id)
             except CanteenItem.DoesNotExist:
                 return Response({"code": 404, "message": "Card not found"}, status=status.HTTP_404_NOT_FOUND)
 
-            # Delete the card
+            # Guard: deleting an item would cascade through Transaction history.
+            # Refuse while it has historical transactions to avoid silently
+            # destroying the audit trail.
+            if Transaction.objects.filter(item=item).exists():
+                return Response({
+                    "code": 400,
+                    "message": "Cannot delete item: it has transaction history. Deactivate or keep it instead.",
+                    "item_id": item_id,
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Delete the item
             item.delete()
-            return Response({"message": "RFID Card deleted successfully.", "card_id": item_id}, status=status.HTTP_200_OK)
+            return Response({"message": "Item deleted successfully.", "item_id": item_id}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
@@ -335,6 +358,29 @@ class EditItemView(generics.UpdateAPIView):
 
 
 # ---- API TO CREATE CARD ----
+def _resolve_student_or_staff(value):
+    """Validate a student_or_staff value and resolve it to a CustomUser.
+
+    Shared by CreateCardView and EditCardView so the UUID parsing, existence
+    check, and role check live in exactly one place. Returns either the
+    resolved CustomUser (role student/staff) or a 400 Response error.
+    """
+    import uuid
+    if value in (None, ''):
+        return Response({"code": 104, "message": "student_or_staff is required"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        return Response({"code": 104, "message": "student_or_staff must be a valid UUID"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        student = CustomUser.objects.get(id=value)
+    except (CustomUser.DoesNotExist, ValueError):
+        return Response({"code": 104, "message": "student_or_staff does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+    if student.role not in ('student', 'staff'):
+        return Response({"code": 104, "message": "student_or_staff must be a student or staff member"}, status=status.HTTP_400_BAD_REQUEST)
+    return student
+
+
 class CreateCardView(generics.CreateAPIView):
     queryset = RFIDCard.objects.all()
     serializer_class = CreateRFIDCardSerializer
@@ -348,13 +394,25 @@ class CreateCardView(generics.CreateAPIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            # Check if student have a card
+            # Required-field checks first (before any DB lookups).
             student_or_staff = request.data.get("student_or_staff")
-            if RFIDCard.objects.filter(student_or_staff=student_or_staff).exists():
+            card_number = request.data.get("card_number")
+
+            if not card_number:
+                return Response({"code": 104, "message": "Card number is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validate student_or_staff is a real UUID up front so the raw
+            # existence filter below cannot raise an unhandled error (500) on
+            # malformed input.
+            student = _resolve_student_or_staff(student_or_staff)
+            if isinstance(student, Response):
+                return student
+
+            # Check if student have a card
+            if RFIDCard.objects.filter(student_or_staff=student).exists():
                 return Response({"code": 112, "message": "This student already have a card"},status=status.HTTP_400_BAD_REQUEST)
             
             # Check if card number already taken
-            card_number = request.data.get("card_number")
             if RFIDCard.objects.filter(card_number=card_number).exists():
                 return Response({"code": 105, "message": "This card number already exists"}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -381,14 +439,10 @@ class EditCardView(generics.UpdateAPIView):
         if request.user.role != 'admin':
             return Response({"code": 403, "message": "Only admins can update users"}, status=status.HTTP_403_FORBIDDEN)
         
-        # Extract `user_id` from request data
+        # Required-field checks FIRST (card_id must be validated before any
+        # card_number uniqueness lookup, so a missing id yields a clean 400).
         card_id = request.data.get('card_id')
         student_or_staff = request.data.get('student_or_staff')
-
-        # Check if card number already taken
-        card_number = request.data.get("card_number")
-        if RFIDCard.objects.filter(card_number=card_number).exclude(student_or_staff=student_or_staff).exists():
-            return Response({"code": 105, "message": "This card number already taken"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not card_id:
             return Response({"code" : 104, "message": "Card ID is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -397,6 +451,17 @@ class EditCardView(generics.UpdateAPIView):
             card = RFIDCard.objects.get(id=card_id)
         except RFIDCard.DoesNotExist:
             return Response({"code": 404, "message": "Card not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # If a student_or_staff is provided, validate it as a real UUID + role.
+        if student_or_staff:
+            student = _resolve_student_or_staff(student_or_staff)
+            if isinstance(student, Response):
+                return student
+
+        # Check if card number already taken
+        card_number = request.data.get("card_number")
+        if card_number and RFIDCard.objects.filter(card_number=card_number).exclude(id=card_id).exists():
+            return Response({"code": 105, "message": "This card number already taken"}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = self.get_serializer(card, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -407,9 +472,10 @@ class EditCardView(generics.UpdateAPIView):
 
 # ---- API FOR DELETE CARD -----
 class DeleteCardView(APIView):
+    permission_classes = [IsAdminOnly]
+
     def post(self, request, *args, **kwargs):
         try:
-            # Get card ID from request body
             # Get card ID from request body
             card_id = request.data.get("card_id")
             if not card_id:
@@ -420,6 +486,17 @@ class DeleteCardView(APIView):
                 rfid_card = RFIDCard.objects.get(id=card_id)
             except RFIDCard.DoesNotExist:
                 return Response({"code": 404, "message": "Card not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # Guard: deleting a card cascades through Transaction and ScannedData
+            # history. Refuse while history exists to protect the audit trail;
+            # admins should deactivate (ActivateDeactivateCardView) instead.
+            if (Transaction.objects.filter(rfid_card=rfid_card).exists()
+                    or ScannedData.objects.filter(rfid_card=rfid_card).exists()):
+                return Response({
+                    "code": 400,
+                    "message": "Cannot delete card: it has transaction/history. Deactivate the card instead.",
+                    "card_id": card_id,
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             # Delete the card
             rfid_card.delete()

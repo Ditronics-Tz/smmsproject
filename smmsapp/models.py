@@ -1,9 +1,19 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q, CheckConstraint
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+from decimal import Decimal
 import uuid
 import os
+
+# The lowest allowed balance for an RFID card. An insufficient-balance meal
+# applies a -500 penalty, and this floor is the maximum distance a single
+# penalty or deduction may push a balance below zero. It is enforced both in
+# the model (validators + DB CHECK constraint) so no code path, admin action,
+# or script can drive a card arbitrarily negative.
+RFID_BALANCE_FLOOR = Decimal('-500.00')
 
 # --- function to save profile image
 def user_profile_path(instance, filename):
@@ -80,12 +90,25 @@ class RFIDCard(models.Model):
     card_number = models.CharField(max_length=50, unique=True)
     student_or_staff = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
     control_number = models.CharField(max_length=50, unique=True)
-    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    balance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.0,
+        validators=[MinValueValidator(RFID_BALANCE_FLOOR)],
+    )
     insufficient_meal_count = models.PositiveIntegerField(default=0)  # Field to track insufficient meals
     is_active = models.BooleanField(default=True)
     issued_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            CheckConstraint(
+                check=Q(balance__gte=RFID_BALANCE_FLOOR),
+                name='rfidcard_balance_floor_gte_minus500',
+            ),
+        ]
 
     def __str__(self):
         return f"Card: {self.card_number} - {self.student_or_staff.first_name}"

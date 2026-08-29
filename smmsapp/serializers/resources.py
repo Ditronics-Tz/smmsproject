@@ -174,6 +174,14 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         random4digit = random.randint(1000, 9999)
         return f"{school_number}{year}{month}{random4digit}"
 
+    # Ensure a card can never be created with a balance below the enforced floor.
+    def validate_balance(self, value):
+        if value is not None and value < RFID_BALANCE_FLOOR:
+            raise serializers.ValidationError(
+                f"Balance cannot be below {RFID_BALANCE_FLOOR}."
+            )
+        return value
+
     # Create a new RFID card
     def create(self, validated_data):
         student_or_staff = validated_data.get('student_or_staff')
@@ -187,7 +195,11 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         # school_number = validated_data.pop('school_number')
         control_number = self.generate_control_number(school_number)
         validated_data['control_number'] = control_number
-        rfid = RFIDCard.objects.create(is_active=False, **validated_data)
+        # A newly issued card is always inactive until the student activates it.
+        # Assign via the dict (not a duplicate kwarg) so `is_active` supplied in
+        # the request cannot collide with the enforced default.
+        validated_data['is_active'] = False
+        rfid = RFIDCard.objects.create(**validated_data)
 
         if rfid.student_or_staff.role == 'student':
             # Notify parent

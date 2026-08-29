@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
+from decimal import Decimal
+from django.db import transaction
 from django.db.models import Q
 from ..models import *
 from ..serializers.sessions import ScanSessionSerializer, ScannedDataSerializer, TransactionSerializer
@@ -30,88 +32,100 @@ class ScanRFIDCardView(APIView):
         except ScanSession.DoesNotExist:
             return Response({'code': 114, 'message': 'Active session not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Validate RFID Card
-        try:
-            rfid_card = RFIDCard.objects.get(card_number=card_number, is_active=True)
-            student_or_staff = rfid_card.student_or_staff
-        except RFIDCard.DoesNotExist:
-            return Response({'code': 115, 'message': 'Invalid or inactive RFID card'}, status=status.HTTP_404_NOT_FOUND)
-
         # Validate Canteen Item
         try:
             item = CanteenItem.objects.get(id=item_id)
         except CanteenItem.DoesNotExist:
             return Response({'code': 116, 'message': 'Invalid canteen item'}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Check if student already purchase the item on same session
-        if ScannedData.objects.filter(session=session, student_or_staff=student_or_staff, rfid_card=rfid_card, item=item).exists():
-            return Response({'code': 119, "message": "Already purchase this item"}, status=status.HTTP_400_BAD_REQUEST)
 
-       # Check if student has exceeded 10 insufficient meals
-        if rfid_card.insufficient_meal_count >= 10:
-            if student_or_staff.role == 'student':
-                title = f"{student_or_staff.first_name}'s Card Blocked"
-                message = f"Your child {student_or_staff.first_name} does not get meal today because insuficient balance execeeded 10 times, Please recharge for your child to get a meal. Available Balance is {rfid_card.balance}"
-            else: 
-                title = f"Your Card Blocked"
-                message = f"Your card is blocked as you get penalty 10 times after insuficient balance in your account. Please recharge your account to unblock"
-            return Response({'code': 118, 'message': 'Meal denied. Customer exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
+        # The read-modify-write on rfid_card.balance must be atomic and hold a
+        # row lock. Without it, two operators scanning the same card at once (or
+        # a double-tap) can both pass the sufficiency check and double-deduct or
+        # overdraw the balance, corrupting rfid_card.balance. select_for_update()
+        # serializes concurrent scans on the same row so each sees the committed
+        # balance; concurrent same-card scans block until the first commit.
+        with transaction.atomic():
+            # Validate RFID Card, locking the row for the duration of this
+            # transaction so the balance read and deduct are race-free.
+            try:
+                rfid_card = RFIDCard.objects.select_for_update().get(card_number=card_number, is_active=True)
+                student_or_staff = rfid_card.student_or_staff
+            except RFIDCard.DoesNotExist:
+                return Response({'code': 115, 'message': 'Invalid or inactive RFID card'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Deduct balance if sufficient funds
-        if rfid_card.balance >= item.price:
-            rfid_card.balance -= item.price
-            trans_status = 'successful'
-            title = f"Transaction Report"
-            if student_or_staff.role == 'student':
-                message = f"Your child {student_or_staff.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
+            # Check if student already purchase the item on same session
+            if ScannedData.objects.filter(session=session, student_or_staff=student_or_staff, rfid_card=rfid_card, item=item).exists():
+                return Response({'code': 119, "message": "Already purchase this item"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if student has exceeded 10 insufficient meals
+            if rfid_card.insufficient_meal_count >= 10:
+                if student_or_staff.role == 'student':
+                    title = f"{student_or_staff.first_name}'s Card Blocked"
+                    message = f"Your child {student_or_staff.first_name} does not get meal today because insuficient balance execeeded 10 times, Please recharge for your child to get a meal. Available Balance is {rfid_card.balance}"
+                else: 
+                    title = f"Your Card Blocked"
+                    message = f"Your card is blocked as you get penalty 10 times after insuficient balance in your account. Please recharge your account to unblock"
+                return Response({'code': 118, 'message': 'Meal denied. Customer exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
+
+            # Deduct balance if sufficient funds
+            if rfid_card.balance >= item.price:
+                rfid_card.balance -= item.price
+                amount = item.price
+                trans_status = 'successful'
+                title = f"Transaction Report"
+                if student_or_staff.role == 'student':
+                    message = f"Your child {student_or_staff.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
+                else:
+                    message = f"You purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}. If is not you contact with our support imidietly"
             else:
-                message = f"You purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}. If is not you contact with our support imidietly"
-        else:
-            # Allow the meal but apply penalty (-500)
-            rfid_card.balance -= (item.price + 500)  
-            rfid_card.insufficient_meal_count += 1
-            trans_status = 'penalty'
-            title = f"WARNING: Transaction Penalty"
-            if student_or_staff.role == 'student':
-                message = f"Your child {student_or_staff.first_name} has purchase {item.name} with price {item.price} and penalty of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalties"
-            else:
-                message = f"Your purchase {item.name} with price {item.price} and penalty of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your card blocked, Please recharge to avoid further penalties"
+                # Allow the meal but apply penalty (-500). Clamp to the balance
+                # floor (-500.00) so the invariant enforced by the model remains
+                # satisfied even when the balance was already negative.
+                rfid_card.balance = max(rfid_card.balance - (item.price + 500), Decimal('-500.00'))
+                rfid_card.insufficient_meal_count += 1
+                amount = item.price + 500
+                trans_status = 'penalty'
+                title = f"WARNING: Transaction Penalty"
+                if student_or_staff.role == 'student':
+                    message = f"Your child {student_or_staff.first_name} has purchase {item.name} with price {item.price} and penalty of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalties"
+                else:
+                    message = f"Your purchase {item.name} with price {item.price} and penalty of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your card blocked, Please recharge to avoid further penalties"
 
 
-        rfid_card.save()
+            rfid_card.save()
 
-        # Store scanned data
-        scanned_data = ScannedData.objects.create(
-            session=session,
-            student_or_staff=student_or_staff,
-            rfid_card=rfid_card,
-            item=item
-        )
-
-        # Log transaction
-        transaction = Transaction.objects.create(
-            student_or_staff=student_or_staff,
-            rfid_card=rfid_card,
-            item=item,
-            amount=item.price if rfid_card.balance >= item.price else (item.price + 500),
-            transaction_status = trans_status
-        )
-
-        # Notify parent
-        parents = ParentStudent.objects.filter(student=student_or_staff)
-        for parent_entry in parents:
-            Notification.objects.create(
-                title=title,
-                recipient=parent_entry.parent,
-                transaction=transaction,
-                message=message,
-                status='pending',
-                type='transaction'
+            # Store scanned data
+            scanned_data = ScannedData.objects.create(
+                session=session,
+                student_or_staff=student_or_staff,
+                rfid_card=rfid_card,
+                item=item
             )
 
-        # Return response
-        serializer = ScannedDataSerializer(scanned_data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+            # Log transaction
+            transaction_record = Transaction.objects.create(
+                student_or_staff=student_or_staff,
+                rfid_card=rfid_card,
+                item=item,
+                amount=amount,
+                transaction_status=trans_status
+            )
+
+            # Notify parent
+            parents = ParentStudent.objects.filter(student=student_or_staff)
+            for parent_entry in parents:
+                Notification.objects.create(
+                    title=title,
+                    recipient=parent_entry.parent,
+                    transaction=transaction_record,
+                    message=message,
+                    status='pending',
+                    type='transaction'
+                )
+
+            # Return response
+            serializer = ScannedDataSerializer(scanned_data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 # --- API FOR GET ACTIVE SESSION -----
