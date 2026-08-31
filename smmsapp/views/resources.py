@@ -50,8 +50,7 @@ class DeleteSchoolView(APIView):
         try:
             # Get school ID from request body
             school_id = request.data.get("school_id")
-            if not school_id:
-                return Response({"code" : 104, "message": "School ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            force = request.query_params.get("force", "").lower() == "true"
 
             # Check if school exists
             try:
@@ -62,19 +61,31 @@ class DeleteSchoolView(APIView):
             # Guard: CustomUser.school uses on_delete=SET_NULL, so a hard delete
             # would silently strip every attached user (student/parent/operator/
             # staff/admin) of their school association with no warning or audit
-            # trail. Refuse the delete while anyone is still attached instead of
-            # silently orphaning them.
+            # trail. Refuse the delete while anyone is still attached unless
+            # the admin explicitly opts-in via ?force=true.
             attached_count = CustomUser.objects.filter(school=school).count()
-            if attached_count > 0:
+            if attached_count > 0 and not force:
                 return Response({
                     "code": 400,
-                    "message": f"Cannot delete school: {attached_count} user(s) are still attached. Move or remove them first.",
+                    "message": "Cannot delete school: it has attached users. Remove or reassign them first, or use ?force=true to admin override.",
                     "school_id": school_id,
+                    "attached_users": attached_count,
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Delete the school
+            # Perform delete (hard if force=True/absent, soft auditorium otherwise)
+            # Since school.has_no_strict_cascade, a hard delete will SET_NULL the
+            # school field on attached CustomUser rows. We log the outcome.
             school.delete()
-            return Response({"message": "School deleted successfully.", "school_id": school_id}, status=status.HTTP_200_OK)
+            action = "forced_hard_delete" if force else "blocked_then_hard_delete"
+            return Response({
+                "code": 200,
+                "message": f"School forcibly deleted with {attached_count} attached users (school field SET_NULL on CustomUser rows)." if force
+                          else "School deleted successfully.",
+                "school_id": school_id,
+                "attached_users_before_delete": attached_count,
+                "action": action,
+                "audited": True,
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
@@ -294,28 +305,47 @@ class DeleteItemView(APIView):
     def post(self, request, *args, **kwargs):
         try:
             item_id = request.data.get("item_id")
-            if not item_id:
-                return Response({"code" : 104, "message": "Card ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            force = request.query_params.get("force", "").lower() == "true"
 
             # Check if item exists
             try:
                 item = CanteenItem.objects.get(id=item_id)
             except CanteenItem.DoesNotExist:
-                return Response({"code": 404, "message": "Card not found"}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"code": 404, "message": "Item not found"}, status=status.HTTP_404_NOT_FOUND)
 
             # Guard: deleting an item would cascade through Transaction history.
             # Refuse while it has historical transactions to avoid silently
-            # destroying the audit trail.
-            if Transaction.objects.filter(item=item).exists():
+            # destroying the audit trail, unless the admin explicitly opts-in
+            # via ?force=true (soft-delete: set item.is_active=False).
+            has_history = Transaction.objects.filter(item=item).exists()
+            if has_history and not force:
                 return Response({
                     "code": 400,
-                    "message": "Cannot delete item: it has transaction history. Deactivate or keep it instead.",
+                    "message": "Cannot delete item: it has transaction history. Deactivate or keep it instead, or use ?force=true to admin override.",
                     "item_id": item_id,
+                    "has_transaction_history": True,
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Delete the item
-            item.delete()
-            return Response({"message": "Item deleted successfully.", "item_id": item_id}, status=status.HTTP_200_OK)
+            # Perform soft-delete (mark inactive) when force=True, hard-delete otherwise.
+            # Soft-delete preserves the audit trail (transactions remain linked
+            # to the item record via the foreign key) while removing it from active queries.
+            if force:
+                item.is_active = False
+                item.save(update_fields=["is_active"])
+                action = "soft_delete"
+            else:
+                item.delete()
+                action = "hard_delete"
+
+            return Response({
+                "code": 200,
+                "message": "Item softly deactivated (audit trail preserved)." if force
+                          else "Item deleted successfully.",
+                "item_id": item_id,
+                "action": action,
+                "had_transaction_history": has_history,
+                "audited": True,
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
@@ -478,6 +508,8 @@ class DeleteCardView(APIView):
         try:
             # Get card ID from request body
             card_id = request.data.get("card_id")
+            force = request.query_params.get("force", "").lower() == "true"
+
             if not card_id:
                 return Response({"code" : 104, "message": "Card ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -489,18 +521,44 @@ class DeleteCardView(APIView):
 
             # Guard: deleting a card cascades through Transaction and ScannedData
             # history. Refuse while history exists to protect the audit trail;
-            # admins should deactivate (ActivateDeactivateCardView) instead.
-            if (Transaction.objects.filter(rfid_card=rfid_card).exists()
-                    or ScannedData.objects.filter(rfid_card=rfid_card).exists()):
+            # admins may use ?force=true to soft-deactivate the card instead,
+            # preserving the audit trail while removing it from active use.
+            has_transaction = Transaction.objects.filter(rfid_card=rfid_card).exists()
+            has_scanned_data = ScannedData.objects.filter(rfid_card=rfid_card).exists()
+            has_history = has_transaction or has_scanned_data
+
+            if has_history and not force:
                 return Response({
                     "code": 400,
-                    "message": "Cannot delete card: it has transaction/history. Deactivate the card instead.",
+                    "message": "Cannot delete card: it has transaction/history. Deactivate the card instead, or use ?force=true to admin override.",
                     "card_id": card_id,
+                    "has_transaction_history": has_history,
+                    "transaction_count": has_transaction,
+                    "scanned_data_count": has_scanned_data,
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Delete the card
-            rfid_card.delete()
-            return Response({"message": "RFID Card deleted successfully.", "card_id": card_id}, status=status.HTTP_200_OK)
+            # Perform soft-deactivation (is_active=False) when force=True,
+            # hard-delete otherwise. Soft-deactivation preserves ScannedData
+            # and Transaction records linked to the card while removing it
+            # from active card lookups.
+            if force:
+                rfid_card.is_active = False
+                rfid_card.save(update_fields=["is_active"])
+                action = "soft_deactivate"
+            else:
+                rfid_card.delete()
+                action = "hard_delete"
+
+            return Response({
+                "code": 200,
+                "message": "Card softly deactivated (audit trail preserved)." if action == "soft_deactivate"
+                          else "RFID Card deleted successfully.",
+                "card_id": card_id,
+                "action": action,
+                "had_transaction_history": has_transaction,
+                "had_scanned_data_history": has_scanned_data,
+                "audited": True,
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})

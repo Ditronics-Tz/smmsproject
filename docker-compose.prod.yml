@@ -12,6 +12,12 @@
 
 version: '3.8'
 
+volumes:
+  postgres_data:
+  redis_data:
+  static_assets:
+  media_files:
+
 services:
   # PostgreSQL Database - Production settings
   db:
@@ -51,8 +57,10 @@ services:
              --log-level info 
              --access-logfile - 
              --error-logfile -"
-    # Remove volume mounts - code is baked into image
-    volumes: []
+    # Code is baked into image; static & media volumes mounted from host
+    volumes:
+      - static_assets:/app/static
+      - media_files:/app/uploads
     ports:
       # Bind to localhost only for security - use nginx as reverse proxy
       - "127.0.0.1:8000:8000"

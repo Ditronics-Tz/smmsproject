@@ -135,6 +135,127 @@ Once set up, pushing to the `main` branch will automatically deploy the applicat
 | `/api/meals/` | POST | Add new meal (admin only) |
 
 ---
+## Deploying for a new organization
+
+This section documents every environment variable required to deploy the SMMS system for a new organization. None of these require code changes — all are read from the environment via `os.getenv()` with sensible defaults.
+
+### Core Django settings
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `DEBUG` | `False` | Turn on for local development only | Set to `True` for dev |
+| `SECRET_KEY` | *(required)* | Django's secret key — **must be set per deployment** | Generate a new strong value |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated list of allowed hosts | Add your domain(s), e.g. `example.com,www.example.com` |
+| `API_BASE_URL` | `http://127.0.0.1:8000` | Base URL for the API (used in email links, etc.) | Set to your public URL, e.g. `https://app.your-org.com` |
+
+### Database
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `DB_NAME` | `smmsdb` | Database name | Set to your database name |
+| `DB_USER` | `postgres` | Database user | Set to your DB user |
+| `DB_PASSWORD` | *(required)* | Database password — **must be set per deployment** | Generate a secure password |
+| `DB_HOST` | `db` | Database host (Docker network hostname) | Change if not using Docker Compose |
+| `DB_PORT` | `5432` | Database port | Set to your PostgreSQL port |
+
+### CORS & CSRF
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:3001` | Comma-separated origins allowed for CORS | Add your frontend domain(s) |
+| `CSRF_TRUSTED_ORIGINS` | *(empty)* | Comma-separated origins trusted for CSRF | Add your frontend domain(s) |
+
+### HTTPS / Security Headers
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `SECURE_SSL_REDIRECT` | `False` | Redirect HTTP → HTTPS (set `True` only if the app terminates TLS) | Set `True` behind a reverse proxy that handles HTTPS |
+| `SECURE_HSTS_SECONDS` | *(empty)* | HSTS seconds — enable for HTTPS enforcement | e.g. `31536000` for 1 year |
+| `SECURE_HSTS_INCLUDE_SUBDOMAINS` | `True` | Include subdomains in HSTS | Set `False` if needed |
+| `SECURE_HSTS_PRELOAD` | `True` | Add HSTS to browser preload list | Set `False` if needed |
+
+### Firebase (FCM push notifications — optional)
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `FIREBASE_API_KEY` | *(empty)* | Firebase API key | Get from Firebase console |
+| `FIREBASE_SENDER_ID` | *(empty)* | Firebase sender ID | Get from Firebase console |
+| `FIREBASE_PROJECT_ID` | *(empty)* | Firebase project ID | Get from Firebase console |
+
+### Email (outgoing email notifications)
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `EMAIL_HOST` | `smtp.gmail.com` | SMTP host | Change if using a different email provider |
+| `EMAIL_HOST_USER` | *(empty)* | Email username | Set your email address |
+| `EMAIL_HOST_PASSWORD` | *(empty)* | Email password — **required for Gmail/SMTP** | Generate an app password for Gmail or use your SMTP credentials |
+| `DEFAULT_FROM_EMAIL` | *(empty)* | Default sender email | Set your organization's email |
+
+### Celery (background task queue)
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `CELERY_BROKER_URL` | `redis://redis:6379/0` | Celery broker URL | Change if using a different broker or host |
+| `CELERY_RESULT_BACKEND` | *(same as broker)* | Celery result backend | Set explicitly if different from broker |
+
+### Optional: Superuser creation (development only)
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `DJANGO_SUPERUSER_USERNAME` | `admin` | Username for auto-created superuser | Set your preferred username (dev only) |
+| `DJANGO_SUPERUSER_EMAIL` | `admin@smms.local` | Email for auto-created superuser | Set your email (dev only) |
+| `DJANGO_SUPERUSER_PASSWORD` | `Admin123!` | Password for auto-created superuser | Set your password (dev only) |
+
+### Branding & Visual Identity (optional overrides)
+
+| Env Var | Default | Description | Override |
+|---------|---------|-------------|----------|
+| `BRAND_NAME` | `Student Meal Management System` | Display name shown in the UI | Set your organization's name |
+| `BRAND_LOGO_URL` | *(empty)* | URL for a custom logo image | Set to a publicly accessible URL |
+| `BRAND_PRIMARY_COLOR` | *(empty)* | Primary color (hex, e.g. `#2a7ae2`) | Set your brand color |
+| `BRAND_CURRENCY` | `Tsh` | Currency display code | Set your currency symbol/Code |
+| `SUPPORT_CONTACT` | *(empty)* | Support contact email/phone | Set your support contact information |
+
+> **How to override without touching code:**
+> 1. Copy `.env.example` to `.env`
+> 2. Set each variable for your organization
+> 3. Run `docker-compose up --build -d` (or `make prod-setup`)
+> 4. All changes are purely environment-driven — no Python files need modification
+
+### Example `.env` for a new organization
+
+```env
+# Core
+DEBUG=False
+SECRET_KEY=your_strong_secret_key_here
+ALLOWED_HOSTS=your-domain.com,www.your-domain.com
+API_BASE_URL=https://app.your-org.com
+
+# Database
+DB_NAME=your_db_name
+DB_USER=your_db_user
+DB_PASSWORD=your_secure_db_password
+
+# CORS / CSRF
+CORS_ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
+CSRF_TRUSTED_ORIGINS=https://your-domain.com,https://www.your-domain.com
+
+# HTTPS
+SECURE_SSL_REDIRECT=True
+SECURE_HSTS_SECONDS=31536000
+
+# Email
+EMAIL_HOST=smtp.sendgrid.net
+EMAIL_HOST_USER=your_sendgrid_user
+EMAIL_HOST_PASSWORD=your_sendgrid_password
+
+# Branding
+BRAND_NAME=Your Organization Name
+BRAND_CURRENCY=USD
+SUPPORT_CONTACT=support@your-org.com
+```
+
+---
 ## License
 This project is licensed under the MIT License.
 

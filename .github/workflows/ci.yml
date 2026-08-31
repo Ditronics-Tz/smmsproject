@@ -14,7 +14,8 @@ jobs:
         env:
           POSTGRES_DB: smmsdb
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: 123456789
+          # CI-only credentials — ephemeral container, never reused or deployed
+POSTGRES_PASSWORD: 123456789
         ports:
           - 5432:5432
         options: >-

@@ -93,6 +93,9 @@ FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY')
 FIREBASE_SENDER_ID = os.getenv('FIREBASE_SENDER_ID')
 FIREBASE_PROJECT_ID=os.getenv('FIREBASE_PROJECT_ID')
 
+# ---- API BASE URL ----
+API_BASE_URL = os.getenv('API_BASE_URL', 'http://127.0.0.1:8000')
+
 # ---- EMAIL CONDIFURATIONS ----
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST')

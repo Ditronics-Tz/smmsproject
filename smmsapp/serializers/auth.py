@@ -1,4 +1,5 @@
 import json
+import logging
 from uuid import UUID
 from rest_framework import serializers
 from django.core.mail import send_mail
@@ -11,6 +12,8 @@ import string
 from datetime import datetime
 from ..models import CustomUser, RFIDCard, Notification, ParentStudent
 from .resources import SchoolSerializer
+
+logger = logging.getLogger(__name__)
 
 # ----- USER SERIALIZER-----
 class AuthUserSerializer(serializers.ModelSerializer):
@@ -156,10 +159,18 @@ class UserCreateSerializer(serializers.ModelSerializer):
                         recipient_list=[user.email],
                         fail_silently=False,
                     )
-                except Exception:
-                    pass
-            message = f"Hello {user.first_name}, your account was created successfully. Credentials were sent to your email."
-            Notification.objects.create(recipient=user,title=title, type='reminder', message=message)
+                    # Only claim "sent to email" if send_mail did not raise
+                    message = f"Hello {user.first_name}, your account was created successfully. Credentials were sent to your email."
+                    Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
+                except Exception as e:
+                    logger.exception("Failed to send credentials email to %s", user.email)
+                    # Email delivery failed — create notification without claiming email delivery
+                    message = f"Hello {user.first_name}, your account was created successfully. Your credentials are available in the application."
+                    Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
+            else:
+                # No email on file — create notification without claiming email delivery
+                message = f"Hello {user.first_name}, your account was created successfully. Your credentials are available in the application."
+                Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
         return user
 
     # Edit user

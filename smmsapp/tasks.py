@@ -58,7 +58,7 @@ def send_pending_notifications():
                     html_content = render_to_string("email_template.html", {
                         "user": notification.recipient,
                         "notification": notification,
-                        "action_url": "http://adhimkitchen.ditronics.co.tz/"  # Change as needed
+                        "action_url": settings.API_BASE_URL.rstrip('/') + '/admin'
                     })
                     
                     try:

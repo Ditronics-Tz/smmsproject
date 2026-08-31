@@ -227,28 +227,36 @@ class ForgetPasswordView(APIView):
 
         # Deliver the new password to the user's inbox directly. The plaintext is
         # never stored in a Notification row (see security hardening).
-        try:
-            send_mail(
-                subject="Your SMMS Password Has Been Reset",
-                message=(
-                    f"Hello {user.first_name},\n\n"
-                    f"Your password was reset successfully. Your new password is {password}.\n"
-                    f"Please log in and change it once you are in.\n\n"
-                    f"Thank you,\nSMMS Application"
-                ),
-                from_email=None,
-                recipient_list=[user.email],
-                fail_silently=False,
-            )
-        except Exception:
-            # Do not leak whether delivery failed; the sanitized notification is
-            # still recorded so the user can request a new reset.
+        if user.email:
+            try:
+                send_mail(
+                    subject="Your SMMS Password Has Been Reset",
+                    message=(
+                        f"Hello {user.first_name},\n\n"
+                        f"Your password was reset successfully. Your new password is {password}.\n"
+                        f"Please log in and change it once you are in.\n\n"
+                        f"Thank you,\nSMMS Application"
+                    ),
+                    from_email=None,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                logger.exception("Failed to send password reset email to %s", user.email)
+        else:
+            # No email on file — password was changed in DB; user must contact admin
             pass
 
         # Store a sanitized notification — no plaintext password in the database.
         title = "Reset Password"
-        message = "Your password was reset successfully. Your temporary password was sent to your email."
+        if user.email:
+            message = "Your password was reset successfully. Your temporary password was sent to your email."
+        else:
+            message = "Your password was reset successfully. Please contact an administrator to retrieve your new password."
         Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
+
+        if not user.email:
+            return Response({'code': 125, 'message': 'No email on file for this user. Contact an administrator.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({'message': 'Password reset link sent to your email.'}, status=status.HTTP_200_OK)
 
