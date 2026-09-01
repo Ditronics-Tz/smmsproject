@@ -68,6 +68,7 @@ class ScanRFIDCardView(APIView):
                 return Response({'code': 118, 'message': 'Meal denied. Customer exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
 
             # Deduct balance if sufficient funds
+            old_balance = rfid_card.balance  # capture before change
             if rfid_card.balance >= item.price:
                 rfid_card.balance -= item.price
                 amount = item.price
@@ -94,14 +95,6 @@ class ScanRFIDCardView(APIView):
 
             rfid_card.save()
 
-            # Store scanned data
-            scanned_data = ScannedData.objects.create(
-                session=session,
-                student_or_staff=student_or_staff,
-                rfid_card=rfid_card,
-                item=item
-            )
-
             # Log transaction
             transaction_record = Transaction.objects.create(
                 student_or_staff=student_or_staff,
@@ -109,6 +102,36 @@ class ScanRFIDCardView(APIView):
                 item=item,
                 amount=amount,
                 transaction_status=trans_status
+            )
+
+            # Write ledger entry for the balance change
+            from ..models import LedgerEntry
+            if trans_status == 'successful':
+                LedgerEntry.objects.create(
+                    rfid_card=rfid_card,
+                    event_type='purchase',
+                    amount=-item.price,  # negative for purchase
+                    balance_before=old_balance,
+                    balance_after=rfid_card.balance,
+                    ref_transaction=transaction_record,
+                )
+            else:  # penalty
+                # For penalty, the transaction.amount already includes the +500 penalty
+                LedgerEntry.objects.create(
+                    rfid_card=rfid_card,
+                    event_type='penalty',
+                    amount=-(item.price + 500),  # negative for the full penalty deduction
+                    balance_before=old_balance,  # captured before penalty was applied
+                    balance_after=rfid_card.balance,
+                    ref_transaction=transaction_record,
+                )
+
+            # Store scanned data
+            scanned_data = ScannedData.objects.create(
+                session=session,
+                student_or_staff=student_or_staff,
+                rfid_card=rfid_card,
+                item=item
             )
 
             # Notify parent
@@ -184,12 +207,57 @@ class EndScanSessionView(APIView):
             except ScanSession.DoesNotExist:
                 return Response({'code': 114, 'message': 'Active session not found'}, status=status.HTTP_404_NOT_FOUND)
 
+            # ---- RECONCILIATION: compute scanned value, ask operator for expected cash ----
+            from decimal import Decimal
+            from django.db.models import Sum, F
+            from ..models import ScannedData
+
+            # Compute total value of all items scanned in this session
+            scanned_total = ScannedData.objects.filter(session=session).aggregate(
+                total=Sum(F('item__price'))
+            )['total'] or Decimal('0.00')
+
+            # Read expected cash from request (operator inputs actual till amount)
+            expected_cash = Decimal(request.data.get('expected_cash', '0.00') or '0.00')
+
+            variance = expected_cash - scanned_total
+
+            from ..models import Reconciliation
+            reconciliation, created = Reconciliation.objects.get_or_create(
+                session=session,
+                defaults={
+                    'scanned_value': scanned_total,
+                    'expected_cash': expected_cash,
+                    'variance': variance,
+                    'status': 'matched' if variance == 0 else 'variance',
+                    'reason': request.data.get('reason', '') if variance != 0 else '',
+                },
+            )
+            if not created:
+                # Update existing reconciliation if session is re-ended
+                reconciliation.scanned_value = scanned_total
+                reconciliation.expected_cash = expected_cash
+                reconciliation.variance = variance
+                reconciliation.status = 'matched' if variance == 0 else 'variance'
+                reconciliation.reason = request.data.get('reason', '') if variance != 0 else ''
+                reconciliation.save()
+
             session.status = 'completed'
             session.end_at = timezone.now()
             session.save()
 
             serializer = ScanSessionSerializer(session)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response({
+                'session': serializer.data,
+                'reconciliation': {
+                    'id': str(reconciliation.id),
+                    'scanned_value': str(reconciliation.scanned_value),
+                    'expected_cash': str(reconciliation.expected_cash),
+                    'variance': str(reconciliation.variance),
+                    'status': reconciliation.status,
+                    'reason': reconciliation.reason,
+                }
+            }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"},status=status.HTTP_400_BAD_REQUEST)
 
