@@ -88,7 +88,13 @@ class CustomUser(AbstractUser):
 class RFIDCard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     card_number = models.CharField(max_length=50, unique=True)
-    student_or_staff = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
+    student_or_staff = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        limit_choices_to={'role__in': ['student', 'staff']},
+        related_name='rfid_cards',
+        help_text='Owner of the card. A student/staff may have multiple cards',
+    )
     control_number = models.CharField(max_length=50, unique=True)
     balance = models.DecimalField(
         max_digits=10,
@@ -112,6 +118,28 @@ class RFIDCard(models.Model):
 
     def __str__(self):
         return f"Card: {self.card_number} - {self.student_or_staff.first_name}"
+
+
+# ------ CARD REPLACEMENT LINK TABLE ------
+class ReplacementLink(models.Model):
+    """Audit row linking an old (lost) card to its replacement.
+
+    The old card is deactivated and a new card is issued for the same
+    student/staff. Balance is migrated and transactional history is repointed to
+    the new card. This row preserves the old -> new linkage for traceability.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    old_card = models.OneToOneField(RFIDCard, on_delete=models.CASCADE, related_name='replaced_by')
+    new_card = models.OneToOneField(RFIDCard, on_delete=models.CASCADE, related_name='replacement_of')
+    replaced_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='card_replacements', help_text='Admin who performed the replacement',
+    )
+    reason = models.TextField(help_text='Reason for replacement (e.g. card lost or damaged)')
+    replaced_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Replace {self.old_card.card_number} -> {self.new_card.card_number}"
 
 
 # ------ BANK_DEPOSIT TABLE
@@ -260,6 +288,7 @@ class LedgerEntry(models.Model):
         ('purchase', 'Purchase / Penalty'),
         ('deposit', 'Deposit'),
         ('reversal', 'Reversal'),
+        ('card_replacement', 'Card Replacement'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -313,6 +342,22 @@ class Reconciliation(models.Model):
 
     def __str__(self):
         return f"Reconciliation {self.session.id}: scanned={self.scanned_value} expected={self.expected_cash} variance={self.variance} {self.status}"
+
+
+# ------ PASSWORD RESET TOKEN TABLE ------
+class PasswordResetToken(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='password_reset_tokens')
+    token_hash = models.CharField(max_length=128, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Reset token for {self.user.username} (used: {self.used_at is not None})"
 
 
 # ------ REVERSAL TABLE ------

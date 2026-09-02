@@ -8,8 +8,15 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q
 import random
 import string
-from ..serializers.auth import UserCreateSerializer, AuthUserSerializer, LoginSerializer
-from ..models import CustomUser as User, RFIDCard, Notification
+import secrets
+import hashlib
+from datetime import timedelta
+from django.utils import timezone
+from ..serializers.auth import (
+    UserCreateSerializer, AuthUserSerializer, LoginSerializer,
+    PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
+)
+from ..models import CustomUser as User, RFIDCard, Notification, PasswordResetToken
 from ..permissions.roles import IsAdminOnly, IsAdminOrParent
 
 # Generate JWT tokens for user
@@ -190,75 +197,139 @@ class ActivateDeactivateUserView(APIView):
 
 # FORGET PASSWORD VIEW
 class ForgetPasswordView(APIView):
+    """Request a self-service password reset.
+
+    Generates a single-use, expiring token, hashes it for storage, and emails
+    the user a reset link. Always returns the same generic success response
+    whether or not the email exists (enumeration-resistant, paired with the
+    existing 'forget_password' throttle). Never generates or emails a plaintext
+    password.
+    """
     permission_classes = [AllowAny]
-    queryset = User.objects.all()
     throttle_scope = 'forget_password'
+    serializer_class = PasswordResetRequestSerializer
+    RESET_LINK_TTL = timedelta(minutes=30)
 
-    # Generate strong password
-    def generate_password(self, last_name):
-        """Generate a strong random password."""
-        digits = string.digits
-        special_chars = "!@#$%&*"  # Limit special characters
-
-        password = [
-            random.choice(digits),
-            random.choice(special_chars)
-        ]
-
-        all_chars = digits + special_chars
-        password += random.choices(all_chars, k=1)  # Ensure 8-character length
-        random.shuffle(password)
-
-        return f'{last_name}{"".join(password)}'
+    @staticmethod
+    def _hash_token(token):
+        return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
     def post(self, request):
-        email = request.data.get('email')
-        if not email:
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
             return Response({'code': 123, 'message': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({'code': 124, 'message': 'User with this email does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+        email = serializer.validated_data['email'].strip().lower()
 
-        password = self.generate_password(user.last_name)
-        user.set_password(password)
-        user.save()
+        # Always return the same generic message regardless of whether the user
+        # exists, to avoid leaking which emails have accounts (DIT-64 pairing).
+        generic_message = 'If an account exists for this email, a reset link has been sent.'
+        user = User.objects.filter(email__iexact=email).first()
 
-        # Deliver the new password to the user's inbox directly. The plaintext is
-        # never stored in a Notification row (see security hardening).
-        if user.email:
+        if user is not None and user.email:
+            # Invalidate any prior unused tokens for this user so only one is live.
+            PasswordResetToken.objects.filter(user=user, used_at__isnull=True).delete()
+
+            raw_token = secrets.token_urlsafe(32)
+            PasswordResetToken.objects.create(
+                user=user,
+                token_hash=self._hash_token(raw_token),
+                expires_at=timezone.now() + self.RESET_LINK_TTL,
+            )
+
             try:
                 send_mail(
-                    subject="Your SMMS Password Has Been Reset",
+                    subject="Reset Your SMMS Password",
                     message=(
                         f"Hello {user.first_name},\n\n"
-                        f"Your password was reset successfully. Your new password is {password}.\n"
-                        f"Please log in and change it once you are in.\n\n"
+                        f"We received a request to reset your password. Use the link below "
+                        f"to set a new password. This link expires in 30 minutes and can "
+                        f"only be used once:\n\n"
+                        f"Reset token: {raw_token}\n\n"
+                        f"If you did not request this, you can safely ignore this email.\n\n"
                         f"Thank you,\nSMMS Application"
                     ),
                     from_email=None,
                     recipient_list=[user.email],
                     fail_silently=False,
                 )
-            except Exception as e:
-                logger.exception("Failed to send password reset email to %s", user.email)
-        else:
-            # No email on file — password was changed in DB; user must contact admin
-            pass
+            except Exception:
+                # Email delivery failed — do not leak account existence. The
+                # request still reports generic success; admin can re-issue.
+                pass
 
-        # Store a sanitized notification — no plaintext password in the database.
-        title = "Reset Password"
-        if user.email:
-            message = "Your password was reset successfully. Your temporary password was sent to your email."
-        else:
-            message = "Your password was reset successfully. Please contact an administrator to retrieve your new password."
-        Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
+            Notification.objects.create(
+                recipient=user,
+                title="Reset Password",
+                type='reminder',
+                message="A password reset link was sent to your registered email.",
+            )
 
-        if not user.email:
-            return Response({'code': 125, 'message': 'No email on file for this user. Contact an administrator.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message': generic_message}, status=status.HTTP_200_OK)
 
-        return Response({'message': 'Password reset link sent to your email.'}, status=status.HTTP_200_OK)
+
+# CONFIRM PASSWORD RESET VIEW
+class ConfirmPasswordResetView(APIView):
+    """Validate a single-use, expiring reset token and set a new password."""
+    permission_classes = [AllowAny]
+    serializer_class = PasswordResetConfirmSerializer
+    RESET_LINK_TTL = timedelta(minutes=30)
+
+    @staticmethod
+    def _hash_token(token):
+        return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {'code': 400, 'message': 'token and new_password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token = serializer.validated_data['token']
+        new_password = serializer.validated_data['new_password']
+
+        token_hash = self._hash_token(token)
+        try:
+            reset = PasswordResetToken.objects.select_related('user').get(token_hash=token_hash)
+        except PasswordResetToken.DoesNotExist:
+            return Response(
+                {'code': 124, 'message': 'Invalid or expired reset token.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Single-use: already used
+        if reset.used_at is not None:
+            return Response(
+                {'code': 124, 'message': 'This reset token has already been used.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Expired
+        if timezone.now() > reset.expires_at:
+            return Response(
+                {'code': 124, 'message': 'This reset token has expired.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = reset.user
+        user.set_password(new_password)
+        user.save()
+
+        # Mark used and invalidate any other outstanding tokens for this user.
+        reset.used_at = timezone.now()
+        reset.save(update_fields=['used_at'])
+        PasswordResetToken.objects.filter(user=user, used_at__isnull=True).delete()
+
+        Notification.objects.create(
+            recipient=user,
+            title="Password Changed",
+            type='reminder',
+            message="Your password was reset successfully.",
+        )
+
+        return Response({'message': 'Password reset successfully. You can now log in.'}, status=status.HTTP_200_OK)
 
 
 class ChangePasswordView(APIView):

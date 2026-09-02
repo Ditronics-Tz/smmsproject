@@ -36,25 +36,25 @@ class PasswordNotificationSecurityTests(TestCase):
         super().setUp()
         self.api = APIClient()
 
-    def test_forget_password_sends_plaintext_via_email_not_db(self):
+    def test_forget_password_sends_token_link_not_plaintext(self):
         response = self.api.post("/auth/forgot-password", {"email": self.parent.email})
         self.assertEqual(response.status_code, 200)
 
-        # Email carries the actual one-time password.
+        # Email carries a reset token/link — never a plaintext password.
         self.assertEqual(len(mail.outbox), 1)
         email_body = mail.outbox[0].body
         email_msg = mail.outbox[0].message().as_string()
 
-        # The stored notification must NOT embed the plaintext password.
+        # The stored notification must NOT embed a plaintext password.
         notification = Notification.objects.filter(recipient=self.parent, title="Reset Password").latest("id")
 
-        # The plaintext password IS present in the email, but not in the DB row.
-        # The stored message is the fixed sanitized string.
+        # New token-based flow: no auto-generated plaintext password in email or DB.
         self.assertEqual(
             notification.message,
-            "Your password was reset successfully. Your temporary password was sent to your email.",
+            "A password reset link was sent to your registered email.",
         )
-        self.assertIn("new password is", email_msg)
+        self.assertNotIn("new password is", email_msg)
+        self.assertIn("Reset token:", email_body)
         self.assertIn(self.parent.first_name, email_body)
 
     def test_create_non_student_stores_sanitized_notification(self):

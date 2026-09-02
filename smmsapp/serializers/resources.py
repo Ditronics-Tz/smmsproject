@@ -80,7 +80,7 @@ class CanteenItemSerializer(serializers.ModelSerializer):
 
 # ----- FULL STUDENT DETAILS -----
 class FullStudentSerializer(serializers.ModelSerializer):
-    rfid_card = RFIDCardSerializer(source = 'rfidcard', read_only = True)
+    rfid_card = serializers.SerializerMethodField()
     school = serializers.CharField(source='school.name',read_only=True)
     school_id = serializers.CharField(source='school.id', read_only=True)
     parents = serializers.SerializerMethodField()
@@ -90,6 +90,10 @@ class FullStudentSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id','first_name','middle_name',  'last_name','gender', 'class_room',
                   'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents']
+
+    def get_rfid_card(self, obj):
+        card = obj.rfid_cards.filter(is_active=True).first()
+        return RFIDCardSerializer(card).data if card else None
 
     def get_parents(self, obj):
         parents = ParentStudent.objects.filter(student=obj).select_related('parent')
@@ -102,7 +106,7 @@ class FullStudentSerializer(serializers.ModelSerializer):
 
 # ----- FULL STAFF DETAILS -----
 class FullStaffSerializer(serializers.ModelSerializer):
-    rfid_card = RFIDCardSerializer(source = 'rfidcard', read_only = True)
+    rfid_card = serializers.SerializerMethodField()
     school = serializers.CharField(source='school.name',read_only=True)
     school_id = serializers.CharField(source='school.id', read_only=True)
     transactions = serializers.SerializerMethodField()
@@ -112,6 +116,10 @@ class FullStaffSerializer(serializers.ModelSerializer):
         fields = ['id','first_name','middle_name', 'last_name','gender', 'email', 'username', 'mobile_number',
                   'school', 'school_id','profile_picture', 'rfid_card', 'transactions', ]
         
+    def get_rfid_card(self, obj):
+        card = obj.rfid_cards.filter(is_active=True).first()
+        return RFIDCardSerializer(card).data if card else None
+
     def get_transactions(self, obj):
         transactions = Transaction.objects.filter(student_or_staff=obj).order_by('-transaction_date')[:10]
         return TransactionSerializer(transactions, many=True).data
@@ -230,6 +238,14 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         validated_data.pop('control_number', None)  # Ignore control_number if provided
         return super().update(instance, validated_data)
     
+
+# ----- REPLACE CARD SERIALIZER -----
+class ReplaceCardSerializer(serializers.Serializer):
+    old_card_id = serializers.UUIDField()
+    new_card_number = serializers.CharField(trim_whitespace=True)
+    reason = serializers.CharField(allow_blank=True, default='')
+    carry_balance = serializers.BooleanField(default=True)
+
 
 # ----- SERIALIZER FOR NOTIFICATIONS ------
 class NotificationSerializer(serializers.ModelSerializer):

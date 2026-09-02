@@ -22,6 +22,17 @@ class AuthUserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'username', 'email', 'mobile_number', 'role', 'profile_picture', 'first_name', 'middle_name', 'last_name', 'is_superuser', 'school']
 
+#  ----- PASSWORD RESET REQUEST SERIALIZER -----
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+#  ----- PASSWORD RESET CONFIRM SERIALIZER -----
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=200)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+
 #  ----- LOGIN SERIALIZER ----- 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
