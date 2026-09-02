@@ -1,4 +1,4 @@
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q, F
 from django.http import FileResponse
 from django.utils.timezone import now, timedelta
 from rest_framework.response import Response
@@ -8,8 +8,8 @@ from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonRea
 
 from ..serializers.resources import FullStudentSerializer, StudentSerializer, FullStaffSerializer
 
-from ..utils import generate_end_of_day_report, generate_parent_end_of_day_report
-from ..models import ParentStudent, RFIDCard, Transaction, CustomUser, ScanSession, ScannedData
+from ..utils import generate_end_of_day_report, generate_parent_end_of_day_report, get_admin_scope
+from ..models import ParentStudent, RFIDCard, Transaction, CustomUser, ScanSession, ScannedData, CanteenItem
 from ..serializers.dashboard import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly, IsOperator, IsAdminOrOperator
 
@@ -20,12 +20,22 @@ class CountsView(APIView):
     def post(self, request, *args, **kwargs):
         today = now().date()
         week_start = today - timedelta(days=today.weekday())  # Get Monday of the current week
-        
-        total_students = CustomUser.objects.filter(role='student').count()
-        total_parents = CustomUser.objects.filter(role='parent').count()
-        total_staffs = CustomUser.objects.filter(role='staff').count()
-        total_available_balance = RFIDCard.objects.aggregate(total_balance=Sum('balance'))['total_balance'] or 0
-        total_transactions = Transaction.objects.count() 
+
+        # Scope admin counts to a school when the admin is school-scoped.
+        school = get_admin_scope(request.user)
+        user_filter = Q()
+        txn_filter = Q()
+        card_filter = Q()
+        if school is not None:
+            user_filter &= Q(school=school)
+            txn_filter &= Q(student_or_staff__school=school)
+            card_filter &= Q(student_or_staff__school=school)
+
+        total_students = CustomUser.objects.filter(role='student').filter(user_filter).count()
+        total_parents = CustomUser.objects.filter(role='parent').filter(user_filter).count()
+        total_staffs = CustomUser.objects.filter(role='staff').filter(user_filter).count()
+        total_available_balance = RFIDCard.objects.filter(card_filter).aggregate(total_balance=Sum('balance'))['total_balance'] or 0
+        total_transactions = Transaction.objects.filter(txn_filter).count()
 
         total_price_today = 0
         total_price_week = 0
@@ -80,11 +90,16 @@ class SalesSummaryView(APIView):
         else:
             return Response({"error": "Invalid filter. Use 'day', 'month', or 'year'."}, status=status.HTTP_400_BAD_REQUEST)
 
-        total_success = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').count()
-        total_penalts = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').count()
-        total_success_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful') \
+        school = get_admin_scope(request.user)
+        txn_filter = Q()
+        if school is not None:
+            txn_filter &= Q(student_or_staff__school=school)
+
+        total_success = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter).count()
+        total_penalts = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').filter(txn_filter).count()
+        total_success_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter) \
                                          .aggregate(total_amount=Sum('amount'))['total_amount'] or 0
-        total_penalt_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty') \
+        total_penalt_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').filter(txn_filter) \
                                          .aggregate(total_amount=Sum('amount'))['total_amount'] or 0
 
         data = {
@@ -107,7 +122,12 @@ class WeeklySalesTrendView(APIView):
         today = now().date()
         start_date = today - timedelta(days=6)  # Get data for the past 7 days
 
-        sales_data = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful') \
+        school = get_admin_scope(request.user)
+        txn_filter = Q()
+        if school is not None:
+            txn_filter &= Q(student_or_staff__school=school)
+
+        sales_data = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter) \
                                         .values('transaction_date__date') \
                                         .annotate(sales_amount=Sum('amount')) \
                                         .order_by('transaction_date__date')
@@ -132,7 +152,8 @@ class EndOfDayReportView(APIView):
     def get(self, request):
         pdf_buffer = None
         if request.user.role == "admin":
-            pdf_buffer = generate_end_of_day_report()
+            school = get_admin_scope(request.user)
+            pdf_buffer = generate_end_of_day_report(school=school)
         elif request.user.role == "parent":
             pdf_buffer = generate_parent_end_of_day_report(request)
         else:
@@ -196,6 +217,84 @@ class ParentStudentsView(APIView):
         serializer = FullStudentSerializer(students, many=True)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# API FOR PARENT'S CHILD SPEND BREAKDOWN (WEEK / MONTH)
+class ChildSpendView(APIView):
+    """Return aggregated spend per child for the current week or month,
+    broken down per item. Parents only see their own children."""
+    permission_classes = [IsAdminOrParent]
+
+    def post(self, request):
+        if request.user.role != "parent":
+            return Response(
+                {"code": 403, "message": "Access denied. Only parents can access this."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        period = request.data.get('period', 'week')  # 'week' | 'month'
+        today = now().date()
+        if period == 'month':
+            start_date = today.replace(day=1)
+        elif period == 'week':
+            start_date = today - timedelta(days=today.weekday())  # Monday of this week
+        else:
+            return Response(
+                {"code": 400, "message": "Invalid period. Use 'week' or 'month'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        child_id = request.data.get('child_id')
+        relations = ParentStudent.objects.filter(parent=request.user).select_related('student')
+        if child_id:
+            relations = relations.filter(student_id=child_id)
+
+        child_list = [r.student for r in relations]
+
+        result = []
+        transactions = Transaction.objects.filter(
+            student_or_staff__in=child_list,
+            transaction_date__date__gte=start_date,
+        )
+
+        for student in child_list:
+            student_txns = transactions.filter(student_or_staff=student)
+            aggregated = student_txns.aggregate(
+                total_spend=Sum('amount'),
+                txn_count=Count('id'),
+            )
+            penalty_amount = student_txns.filter(transaction_status='penalty').aggregate(
+                total=Sum('amount')
+            )['total'] or 0
+
+            items = student_txns.values('item_id').annotate(
+                quantity=Count('id'),
+                amount=Sum('amount'),
+            ).order_by('item_id')
+
+            item_breakdown = []
+            for entry in items:
+                item = CanteenItem.objects.filter(id=entry['item_id']).first()
+                item_breakdown.append({
+                    'item_id': entry['item_id'],
+                    'item_name': item.name if item else 'Unknown',
+                    'quantity': entry['quantity'],
+                    'amount': entry['amount'] or 0,
+                })
+
+            result.append({
+                'child_id': student.id,
+                'child_name': f"{student.first_name} {student.last_name}".strip(),
+                'class_room': student.class_room,
+                'total_spend': aggregated['total_spend'] or 0,
+                'transaction_count': aggregated['txn_count'] or 0,
+                'penalty_amount': penalty_amount,
+                'items': item_breakdown,
+            })
+
+        serializer = ChildSpendSerializer(result, many=True)
+        return Response({'period': period, 'start_date': start_date, 'children': serializer.data},
+                        status=status.HTTP_200_OK)
 
 
 # API FOR RETURN STAFF'S DETAILS

@@ -30,4 +30,5 @@ urlpatterns = [
     path('list/',include("smmsapp.urls.lists")),
     path('wallet/', include("smmsapp.urls.wallet")),
     path('imports/', include("smmsapp.urls.imports")),
+    path('exports/', include("smmsapp.urls.exports")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

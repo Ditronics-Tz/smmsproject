@@ -24,3 +24,22 @@ class SalesSummarySerializer(serializers.Serializer):
 class WeeklySalesSerializer(serializers.Serializer):
     date = serializers.DateField()
     sales_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+# ---- PER-ITEM SPEND SERIALIZER -----
+class ItemSpendSerializer(serializers.Serializer):
+    item_id = serializers.UUIDField()
+    item_name = serializers.CharField()
+    quantity = serializers.IntegerField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+# ---- CHILD SPEND SERIALIZER -----
+class ChildSpendSerializer(serializers.Serializer):
+    child_id = serializers.UUIDField()
+    child_name = serializers.CharField()
+    class_room = serializers.CharField(required=False, allow_null=True)
+    total_spend = serializers.DecimalField(max_digits=10, decimal_places=2)
+    transaction_count = serializers.IntegerField()
+    penalty_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    items = ItemSpendSerializer(many=True, required=False)

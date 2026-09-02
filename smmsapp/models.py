@@ -79,6 +79,13 @@ class CustomUser(AbstractUser):
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
     profile_picture = models.ImageField(upload_to=user_profile_path, null=True, blank=True)
     mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
+    balance_threshold = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Per-parent default balance threshold that triggers a low-balance reminder for their children. Null falls back to the system default.',
+    )
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.role}"

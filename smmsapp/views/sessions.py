@@ -10,6 +10,7 @@ from ..models import *
 from ..serializers.sessions import ScanSessionSerializer, ScannedDataSerializer, TransactionSerializer
 from django.utils import timezone
 from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminOrParent, IsAdminOnly
+from ..utils import get_admin_scope
 
 
 # --- API FOR SCAN RFID CARD ----- THIS IS THE MAIN FUNCTIONALITY OF THIS SYSTEM -----
@@ -145,6 +146,10 @@ class ScanRFIDCardView(APIView):
                     status='pending',
                     type='transaction'
                 )
+
+            # Raise a low-balance reminder if the balance dropped below the parent threshold
+            from ..services.alerts import maybe_alert_low_balance
+            maybe_alert_low_balance(rfid_card, student_or_staff)
 
             # Return response
             serializer = ScannedDataSerializer(scanned_data)
@@ -328,9 +333,12 @@ class TransactionListView(APIView, PageNumberPagination):
         user = request.user
         search_query = (request.data.get("search") or "").strip()
 
-        # Admins can see all transactions
+        # Admins can see all transactions (school-scoped when school-admin)
         if user.role == 'admin':
             transactions = Transaction.objects.all().order_by('-transaction_date')
+            school = get_admin_scope(user)
+            if school is not None:
+                transactions = transactions.filter(student_or_staff__school=school)
         # Parents can only see transactions for their children
         elif user.role == 'parent':
              # Get all ParentStudent relationships for the current user (parent)

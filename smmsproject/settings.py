@@ -118,7 +118,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.send_pending_notifications",
         "schedule": crontab(minute="*/5"),  # Run every 5 minutes
     },
+    "check-balance-thresholds": {
+        "task": "smmsapp.tasks.check_balance_thresholds",
+        "schedule": crontab(hour="*/6"),  # Run every 6 hours
+    },
 }
+
+# Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
+DEFAULT_BALANCE_THRESHOLD = '1000.00'
 
 
 # Application definition
