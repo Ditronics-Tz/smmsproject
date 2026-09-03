@@ -245,6 +245,11 @@ SPECTACULAR_SETTINGS = {
 
 AUDIT_RETENTION_DAYS = int(os.getenv('AUDIT_RETENTION_DAYS', '365'))
 
+# SMS (Tanzania feature-phone coverage) - abstraction over Twilio / Beem Africa / log
+SMS_PROVIDER = os.getenv('SMS_PROVIDER', 'log')  # log | twilio | beem
+SMS_DAILY_LIMIT = int(os.getenv('SMS_DAILY_LIMIT', '3'))
+SMS_MONTHLY_LIMIT = int(os.getenv('SMS_MONTHLY_LIMIT', '10000'))
+
 # ---- ACCESS AND REFRESH TOKEN -----
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),  # access token to 15 min

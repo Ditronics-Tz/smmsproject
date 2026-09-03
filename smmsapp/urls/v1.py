@@ -11,4 +11,5 @@ urlpatterns = [
     path('imports/', include('smmsapp.urls.imports')),
     path('exports/', include('smmsapp.urls.exports')),
     path('audit/', include('smmsapp.urls.audit')),
+    path('sms/', include('smmsapp.urls.sms')),
 ]

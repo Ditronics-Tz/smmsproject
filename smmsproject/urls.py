@@ -38,6 +38,7 @@ urlpatterns = [
     path('imports/', include("smmsapp.urls.imports")),
     path('exports/', include("smmsapp.urls.exports")),
     path('audit/', include("smmsapp.urls.audit")),
+    path('sms/', include("smmsapp.urls.sms")),
     # Versioned API
     path('api/v1/', include('smmsapp.urls.v1')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

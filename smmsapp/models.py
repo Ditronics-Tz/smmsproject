@@ -79,6 +79,7 @@ class CustomUser(AbstractUser):
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
     profile_picture = models.ImageField(upload_to=user_profile_path, null=True, blank=True)
     mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
+    sms_opt_out = models.BooleanField(default=False, help_text='If true, do not send SMS (opt-out per Tanzania TCRA rules)')
     balance_threshold = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -426,3 +427,38 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.timestamp} {self.actor} {self.action} {self.object_repr}"
+
+
+# ------ SMS DELIVERY LOG ------
+class SMSLog(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+        ('skipped_opt_out', 'Skipped - Opt Out'),
+        ('skipped_rate_limit', 'Skipped - Rate Limited'),
+        ('skipped_no_phone', 'Skipped - No Phone'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='sms_logs')
+    notification = models.ForeignKey(Notification, on_delete=models.SET_NULL, null=True, blank=True, related_name='sms_logs')
+    phone = models.CharField(max_length=20)
+    body = models.TextField()
+    provider = models.CharField(max_length=30, default='log')
+    provider_sid = models.CharField(max_length=128, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error = models.TextField(null=True, blank=True)
+    segments = models.PositiveSmallIntegerField(default=1)
+    cost_estimate = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'created_at']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"SMS to {self.phone} {self.status} ({self.provider})"

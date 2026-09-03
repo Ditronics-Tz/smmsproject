@@ -142,10 +142,10 @@ class ScanRFIDCardView(APIView):
                 item=item
             )
 
-            # Notify parent
+            # Notify parent (email/push via Notification + SMS for feature phones)
             parents = ParentStudent.objects.filter(student=student_or_staff)
             for parent_entry in parents:
-                Notification.objects.create(
+                notif = Notification.objects.create(
                     title=title,
                     recipient=parent_entry.parent,
                     transaction=transaction_record,
@@ -153,6 +153,13 @@ class ScanRFIDCardView(APIView):
                     status='pending',
                     type='transaction'
                 )
+                if trans_status == 'penalty':
+                    try:
+                        from ..services.sms import send_critical_sms
+                        sms_body = f"SMMS penalty: {student_or_staff.first_name} charged {amount} (incl. 500 penalty). Balance {rfid_card.balance}. Top up to avoid blocking."
+                        send_critical_sms(parent_entry.parent, sms_body, notification=notif)
+                    except Exception:
+                        pass
 
             # Raise a low-balance reminder if the balance dropped below the parent threshold
             from ..services.alerts import maybe_alert_low_balance

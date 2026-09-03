@@ -47,7 +47,7 @@ def maybe_alert_low_balance(rfid_card, student):
             continue
         if has_low_balance_alert_today(parent, student):
             continue
-        Notification.objects.create(
+        notif = Notification.objects.create(
             recipient=parent,
             title='Low Balance Reminder',
             message=(
@@ -59,6 +59,13 @@ def maybe_alert_low_balance(rfid_card, student):
             status='pending',
             type='reminder',
         )
+        # SMS first for feature-phone parents (Tanzania): abstracted provider, cost-controlled, logged
+        try:
+            from .sms import send_critical_sms
+            sms_body = f"SMMS: {student.first_name} {student.last_name} balance TZS {rfid_card.balance} below {threshold}. Please top up."
+            send_critical_sms(parent, sms_body, notification=notif)
+        except Exception:
+            pass
         created += 1
 
     return created

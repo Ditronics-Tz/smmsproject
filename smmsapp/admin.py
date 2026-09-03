@@ -1,13 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
-from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification, CanteenItem, ScanSession, ScannedData, School, LedgerEntry, Reversal, Reconciliation, ReplacementLink, PasswordResetToken, AuditLog
+from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification, CanteenItem, ScanSession, ScannedData, School, LedgerEntry, Reversal, Reconciliation, ReplacementLink, PasswordResetToken, AuditLog, SMSLog
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
     list_display = ('username','first_name', 'last_name', 'email','role','mobile_number', 'profile_picture_preview')
     fieldsets = UserAdmin.fieldsets + (
-        ('Additional Info', {'fields': ('middle_name', 'role', 'school', 'fcm_token', 'profile_picture', 'gender', 'mobile_number', 'parent_type')}),
+        ('Additional Info', {'fields': ('middle_name', 'role', 'school', 'fcm_token', 'profile_picture', 'gender', 'mobile_number', 'parent_type', 'sms_opt_out', 'balance_threshold')}),
     )
 
     def profile_picture_preview(self, obj):
@@ -38,4 +38,11 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_filter = ('action','timestamp')
     search_fields = ('object_repr','actor__username')
     readonly_fields = ('timestamp','actor','action','content_type','object_id','object_repr','before','after','ip_address','path','user_agent')
+
+@admin.register(SMSLog)
+class SMSLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at','recipient','phone','status','provider','segments')
+    list_filter = ('status','provider')
+    search_fields = ('phone','recipient__username')
+    readonly_fields = ('id','recipient','notification','phone','body','provider','provider_sid','status','error','segments','cost_estimate','created_at','sent_at')
 
