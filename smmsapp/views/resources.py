@@ -9,6 +9,8 @@ from django.db.models import Q
 from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from ..services.audit import log_action, snapshot
+from drf_spectacular.utils import extend_schema
 from ..serializers import *
 from ..models import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly
@@ -77,7 +79,12 @@ class DeleteSchoolView(APIView):
             # Perform delete (hard if force=True/absent, soft auditorium otherwise)
             # Since school.has_no_strict_cascade, a hard delete will SET_NULL the
             # school field on attached CustomUser rows. We log the outcome.
+            before = snapshot(school)
             school.delete()
+            try:
+                log_action('delete', obj=school, before=before)
+            except Exception:
+                pass
             action = "forced_hard_delete" if force else "blocked_then_hard_delete"
             return Response({
                 "code": 200,
@@ -331,12 +338,22 @@ class DeleteItemView(APIView):
             # Perform soft-delete (mark inactive) when force=True, hard-delete otherwise.
             # Soft-delete preserves the audit trail (transactions remain linked
             # to the item record via the foreign key) while removing it from active queries.
+            before_item = snapshot(item)
             if force:
                 item.is_active = False
                 item.save(update_fields=["is_active"])
+                try:
+                    log_action('deactivate', obj=item, before=before_item, after=snapshot(item))
+                except Exception:
+                    pass
                 action = "soft_delete"
             else:
+                before_item2 = snapshot(item)
                 item.delete()
+                try:
+                    log_action('delete', obj=item, before=before_item2)
+                except Exception:
+                    pass
                 action = "hard_delete"
 
             return Response({
@@ -413,6 +430,7 @@ def _resolve_student_or_staff(value):
     return student
 
 
+@extend_schema(tags=['resources'])
 class CreateCardView(generics.CreateAPIView):
     queryset = RFIDCard.objects.all()
     serializer_class = CreateRFIDCardSerializer
@@ -543,9 +561,14 @@ class DeleteCardView(APIView):
             # hard-delete otherwise. Soft-deactivation preserves ScannedData
             # and Transaction records linked to the card while removing it
             # from active card lookups.
+            before_card = snapshot(rfid_card)
             if force:
                 rfid_card.is_active = False
                 rfid_card.save(update_fields=["is_active"])
+                try:
+                    log_action('deactivate', obj=rfid_card, before=before_card, after=snapshot(rfid_card))
+                except Exception:
+                    pass
                 action = "soft_deactivate"
             else:
                 rfid_card.delete()
@@ -654,6 +677,7 @@ class ActivateDeactivateCardView(APIView):
 
 
 # ---- API TO REPLACE A LOST/DAMAGED CARD -----
+@extend_schema(tags=['resources'])
 class ReplaceCardView(APIView):
     """Issue a replacement card for a lost/damaged card.
 
@@ -760,6 +784,10 @@ class ReplaceCardView(APIView):
                 old_card.save(update_fields=['is_active'])
 
                 # Audit link old -> new.
+                try:
+                    log_action('replace', obj=new_card, after=snapshot(new_card))
+                except Exception:
+                    pass
                 ReplacementLink.objects.create(
                     old_card=old_card,
                     new_card=new_card,

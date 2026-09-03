@@ -15,6 +15,7 @@ from ..models import (
 )
 from ..models.sessions import ScanSession as ScanSessionModel
 from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminOrParent
+from ..services.audit import log_action, snapshot
 from ..serializers.wallet import (
     BankDepositSerializer, ProcessDepositSerializer, LedgerEntrySerializer,
     ReconciliationSerializer, ReversalSerializer, CardLedgerViewSerializer,
@@ -83,6 +84,10 @@ class CreateDepositView(APIView):
                 status='pending',
             )
 
+        try:
+            log_action('create', obj=deposit, after=snapshot(deposit))
+        except Exception:
+            pass
         serializer = BankDepositSerializer(deposit)
         return Response({
             'code': 201,
@@ -141,7 +146,6 @@ class ProcessDepositView(APIView):
                 rfid_card.save()
 
                 # Write ledger entry for the deposit
-                from ..serializers.wallet import LedgerEntrySerializer
                 LedgerEntry.objects.create(
                     rfid_card=rfid_card,
                     event_type='deposit',
@@ -154,6 +158,10 @@ class ProcessDepositView(APIView):
             deposit.status = 'processed'
             deposit.processed_at = timezone.now()
             deposit.save()
+            try:
+                log_action('approve', obj=deposit, after=snapshot(deposit))
+            except Exception:
+                pass
 
             # Notify the parent that their deposit was processed
             from ..models import CustomUser, Notification
@@ -284,6 +292,10 @@ class ReverseTransactionView(APIView):
             transaction.save()
 
             # Create the Reversal record (unique constraint => cannot be applied twice)
+            try:
+                log_action('reverse', obj=transaction, after=snapshot(transaction))
+            except Exception:
+                pass
             Reversal.objects.create(
                 transaction=transaction,
                 reversed_by_id=reversed_by_id,

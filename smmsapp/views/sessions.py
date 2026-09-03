@@ -8,12 +8,15 @@ from django.db import transaction
 from django.db.models import Q
 from ..models import *
 from ..serializers.sessions import ScanSessionSerializer, ScannedDataSerializer, TransactionSerializer
+from drf_spectacular.utils import extend_schema
 from django.utils import timezone
 from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminOrParent, IsAdminOnly
+from ..services.audit import log_action, snapshot
 from ..utils import get_admin_scope
 
 
 # --- API FOR SCAN RFID CARD ----- THIS IS THE MAIN FUNCTIONALITY OF THIS SYSTEM -----
+@extend_schema(tags=['sessions'])
 class ScanRFIDCardView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -127,6 +130,10 @@ class ScanRFIDCardView(APIView):
                     ref_transaction=transaction_record,
                 )
 
+            try:
+                log_action('create', obj=transaction_record, after=snapshot(transaction_record))
+            except Exception:
+                pass
             # Store scanned data
             scanned_data = ScannedData.objects.create(
                 session=session,
@@ -325,6 +332,7 @@ class ScannedDataListView(APIView, PageNumberPagination):
 
 
 # ---- API FOR FETCH TRANSACTIONSERIALIZER -----
+@extend_schema(tags=['sessions'])
 class TransactionListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminOrParent]
     page_size = 50

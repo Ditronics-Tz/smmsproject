@@ -11,6 +11,7 @@ import string
 import secrets
 import hashlib
 from datetime import timedelta
+from drf_spectacular.utils import extend_schema, OpenApiResponse
 from django.utils import timezone
 from ..serializers.auth import (
     UserCreateSerializer, AuthUserSerializer, LoginSerializer,
@@ -18,6 +19,7 @@ from ..serializers.auth import (
 )
 from ..models import CustomUser as User, RFIDCard, Notification, PasswordResetToken
 from ..permissions.roles import IsAdminOnly, IsAdminOrParent
+from ..services.audit import log_action, snapshot
 
 # Generate JWT tokens for user
 def get_tokens_for_user(user):
@@ -29,6 +31,7 @@ def get_tokens_for_user(user):
 
 
 # User Login API (Supports Username or Mobile)
+@extend_schema(tags=['auth'], request=LoginSerializer, responses={200: OpenApiResponse(description='Login success')})
 class LoginView(APIView):
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
@@ -83,6 +86,7 @@ class LogoutView(APIView):
 
 
 # User Creations API
+@extend_schema(tags=['auth'], request=UserCreateSerializer)
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
@@ -113,6 +117,10 @@ class CreateUserView(generics.CreateAPIView):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             user = serializer.save()  # This triggers the control number generation for students
+            try:
+                log_action('create', obj=user, after=snapshot(user))
+            except Exception:
+                pass
 
             return Response({
                     "message": f"{user.role} created successfully", "user": serializer.data}
@@ -144,6 +152,7 @@ class EditUserView(generics.UpdateAPIView):
         if request.user.role != 'admin':
             return Response({"code": 403, "message": "Only admins can update users"}, status=status.HTTP_403_FORBIDDEN)
 
+        before = snapshot(user)
         serializer = self.get_serializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
@@ -152,6 +161,10 @@ class EditUserView(generics.UpdateAPIView):
             serializer.validated_data.pop('password', None)
 
         serializer.save()
+        try:
+            log_action('update', obj=user, before=before, after=snapshot(user))
+        except Exception:
+            pass
         return Response({"message": "User updated successfully", "user": serializer.data}, status=status.HTTP_200_OK)
 
 
@@ -180,6 +193,7 @@ class ActivateDeactivateUserView(APIView):
 
             # Toggle is_active based on request data
             action = request.data.get("action")  # Expected values: "activate" or "deactivate"
+            before = snapshot(user)
             if action == "activate":
                 user.is_active = True
                 message = "User is activated successful."
@@ -190,12 +204,18 @@ class ActivateDeactivateUserView(APIView):
                 return Response({"code": 111, "message": "Invalid action. Use 'activate' or 'deactivate'."}, status=status.HTTP_400_BAD_REQUEST)
 
             user.save()
+            try:
+                act = 'activate' if action == 'activate' else 'deactivate'
+                log_action(act, obj=user, before=before, after=snapshot(user))
+            except Exception:
+                pass
             return Response({"message": message, "card_id": user_id, "is_active": user.is_active}, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
 
 # FORGET PASSWORD VIEW
+@extend_schema(tags=['auth'], request=PasswordResetRequestSerializer)
 class ForgetPasswordView(APIView):
     """Request a self-service password reset.
 
@@ -269,6 +289,7 @@ class ForgetPasswordView(APIView):
 
 
 # CONFIRM PASSWORD RESET VIEW
+@extend_schema(tags=['auth'], request=PasswordResetConfirmSerializer)
 class ConfirmPasswordResetView(APIView):
     """Validate a single-use, expiring reset token and set a new password."""
     permission_classes = [AllowAny]

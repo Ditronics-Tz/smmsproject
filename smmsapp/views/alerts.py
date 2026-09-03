@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from ..permissions.roles import IsAdminOrParent
 from ..serializers.alerts import BalanceThresholdSerializer
+from ..services.audit import log_action, snapshot
 from ..services.alerts import _effective_threshold
 
 
@@ -45,8 +46,13 @@ class BalanceThresholdView(APIView):
         value = serializer.validated_data.get('balance_threshold')
         user = request.user
         # Treat an explicit integer/None from the client via SerializerField.
+        before_thr = snapshot(user)
         user.balance_threshold = value
         user.save(update_fields=['balance_threshold'])
+        try:
+            log_action('update', obj=user, before=before_thr, after=snapshot(user))
+        except Exception:
+            pass
 
         response_serializer = BalanceThresholdSerializer({
             'balance_threshold': user.balance_threshold,

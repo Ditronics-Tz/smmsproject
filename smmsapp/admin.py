@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
-from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification, CanteenItem, ScanSession, ScannedData, School
+from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification, CanteenItem, ScanSession, ScannedData, School, LedgerEntry, Reversal, Reconciliation, ReplacementLink, PasswordResetToken, AuditLog
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
@@ -27,4 +27,15 @@ admin.site.register(CanteenItem),
 admin.site.register(ScannedData),
 admin.site.register(ScanSession),
 admin.site.register(School)
+admin.site.register(LedgerEntry)
+admin.site.register(Reversal)
+admin.site.register(Reconciliation)
+admin.site.register(ReplacementLink)
+admin.site.register(PasswordResetToken)
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ('timestamp','actor','action','object_repr','ip_address','path')
+    list_filter = ('action','timestamp')
+    search_fields = ('object_repr','actor__username')
+    readonly_fields = ('timestamp','actor','action','content_type','object_id','object_repr','before','after','ip_address','path','user_agent')
 

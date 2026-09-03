@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views as wallet_views
+from ..views import wallet as wallet_views
 
 app_name = 'wallet'
 

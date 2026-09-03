@@ -117,6 +117,19 @@ def check_balance_thresholds():
 
 
 @shared_task
+def audit_purge():
+    from datetime import timedelta
+    from django.conf import settings
+    from django.utils.timezone import now as tz_now
+    from .models import AuditLog
+    days = getattr(settings, 'AUDIT_RETENTION_DAYS', 365)
+    cutoff = tz_now() - timedelta(days=days)
+    deleted, _ = AuditLog.objects.filter(timestamp__lt=cutoff).delete()
+    logger.info(f"Audit purge: deleted {deleted} rows older than {cutoff}")
+    return deleted
+
+
+@shared_task
 def generate_export_task(entity, filename, user_id, filters):
     """Asynchronously build an export file and notify the requesting user.
 

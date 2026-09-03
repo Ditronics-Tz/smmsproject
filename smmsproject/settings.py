@@ -122,6 +122,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.check_balance_thresholds",
         "schedule": crontab(hour="*/6"),  # Run every 6 hours
     },
+    "audit-purge": {
+        "task": "smmsapp.tasks.audit_purge",
+        "schedule": crontab(hour=2, minute=0),  # Daily 02:00
+    },
 }
 
 # Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
@@ -139,6 +143,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'drf_spectacular',
     'smmsapp',
     'corsheaders',
 ]
@@ -151,6 +156,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'smmsapp.middleware.audit.AuditMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -215,6 +221,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 5,
     'DEFAULT_THROTTLE_CLASSES': [
@@ -227,6 +234,16 @@ REST_FRAMEWORK = {
         'forget_password': '3/min',   # account-enumeration guard
     },
 }
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'SMMS API',
+    'DESCRIPTION': 'Student Meal Management System API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+
+AUDIT_RETENTION_DAYS = int(os.getenv('AUDIT_RETENTION_DAYS', '365'))
 
 # ---- ACCESS AND REFRESH TOKEN -----
 SIMPLE_JWT = {
