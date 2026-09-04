@@ -1,9 +1,19 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q, CheckConstraint
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+from decimal import Decimal
 import uuid
 import os
+
+# The lowest allowed balance for an RFID card. An insufficient-balance meal
+# applies a -500 penalty, and this floor is the maximum distance a single
+# penalty or deduction may push a balance below zero. It is enforced both in
+# the model (validators + DB CHECK constraint) so no code path, admin action,
+# or script can drive a card arbitrarily negative.
+RFID_BALANCE_FLOOR = Decimal('-500.00')
 
 # --- function to save profile image
 def user_profile_path(instance, filename):
@@ -69,6 +79,14 @@ class CustomUser(AbstractUser):
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
     profile_picture = models.ImageField(upload_to=user_profile_path, null=True, blank=True)
     mobile_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
+    sms_opt_out = models.BooleanField(default=False, help_text='If true, do not send SMS (opt-out per Tanzania TCRA rules)')
+    balance_threshold = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Per-parent default balance threshold that triggers a low-balance reminder for their children. Null falls back to the system default.',
+    )
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.role}"
@@ -78,17 +96,58 @@ class CustomUser(AbstractUser):
 class RFIDCard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     card_number = models.CharField(max_length=50, unique=True)
-    student_or_staff = models.OneToOneField(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
+    student_or_staff = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        limit_choices_to={'role__in': ['student', 'staff']},
+        related_name='rfid_cards',
+        help_text='Owner of the card. A student/staff may have multiple cards',
+    )
     control_number = models.CharField(max_length=50, unique=True)
-    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    balance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.0,
+        validators=[MinValueValidator(RFID_BALANCE_FLOOR)],
+    )
     insufficient_meal_count = models.PositiveIntegerField(default=0)  # Field to track insufficient meals
     is_active = models.BooleanField(default=True)
     issued_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            CheckConstraint(
+                check=Q(balance__gte=RFID_BALANCE_FLOOR),
+                name='rfidcard_balance_floor_gte_minus500',
+            ),
+        ]
+
     def __str__(self):
         return f"Card: {self.card_number} - {self.student_or_staff.first_name}"
+
+
+# ------ CARD REPLACEMENT LINK TABLE ------
+class ReplacementLink(models.Model):
+    """Audit row linking an old (lost) card to its replacement.
+
+    The old card is deactivated and a new card is issued for the same
+    student/staff. Balance is migrated and transactional history is repointed to
+    the new card. This row preserves the old -> new linkage for traceability.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    old_card = models.OneToOneField(RFIDCard, on_delete=models.CASCADE, related_name='replaced_by')
+    new_card = models.OneToOneField(RFIDCard, on_delete=models.CASCADE, related_name='replacement_of')
+    replaced_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='card_replacements', help_text='Admin who performed the replacement',
+    )
+    reason = models.TextField(help_text='Reason for replacement (e.g. card lost or damaged)')
+    replaced_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Replace {self.old_card.card_number} -> {self.new_card.card_number}"
 
 
 # ------ BANK_DEPOSIT TABLE
@@ -107,6 +166,11 @@ class BankDeposit(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     processed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    submitted_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='bank_deposits',
+        help_text='Parent who requested the deposit (optional, for audit)'
+    )
 
     def __str__(self):
         return f"Deposit: {self.amount} - {self.control_number}"
@@ -128,6 +192,7 @@ class CanteenItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    is_active = models.BooleanField(default=True, help_text='Soft-deactivate instead of deleting when transaction history exists')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -140,7 +205,7 @@ class Transaction(models.Model):
         ('pending', 'Pending'),
         ('successful', 'Successful'),
         ('failed', 'Failed'),
-        ('penalt', 'Penalt')
+        ('penalty', 'Penalty')
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -150,6 +215,11 @@ class Transaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     transaction_date = models.DateTimeField(auto_now_add=True)
     transaction_status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    session = models.ForeignKey(
+        ScanSession, on_delete=models.SET_NULL, null=True, blank=True, db_index=True,
+        help_text='Scan session that produced this transaction (for audit & reversal)'
+    )
+    is_voided = models.BooleanField(default=False, db_index=True, help_text='Set when a reversal restores the balance')
 
     def __str__(self):
         return f"{self.student_or_staff.username} - {self.item.name} - ${self.amount}"
@@ -219,3 +289,176 @@ class ScannedData(models.Model):
 
     def __str__(self):
         return f"{self.student_or_staff.username} scanned at {self.scanned_at}"
+
+
+# ------ LEDGER ENTRY TABLE ------
+class LedgerEntry(models.Model):
+    EVENT_TYPES = [
+        ('purchase', 'Purchase / Penalty'),
+        ('deposit', 'Deposit'),
+        ('reversal', 'Reversal'),
+        ('card_replacement', 'Card Replacement'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE, db_index=True)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)  # signed: negative for purchases/penalties, positive for deposits/reversals
+    balance_before = models.DecimalField(max_digits=10, decimal_places=2)
+    balance_after = models.DecimalField(max_digits=10, decimal_places=2)
+    ref_transaction = models.ForeignKey(
+        Transaction, on_delete=models.SET_NULL, null=True, blank=True, db_index=True,
+        help_text='Transaction reversed/deposited (if any)'
+    )
+    ref_deposit = models.ForeignKey(
+        BankDeposit, on_delete=models.SET_NULL, null=True, blank=True, db_index=True,
+        help_text='Bank deposit that credited the balance (if any)'
+    )
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['rfid_card', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_event_type_display()} {self.rfid_card.card_number} bal:{self.balance_before}→{self.balance_after}"
+
+
+# ------ RECONCILIATION TABLE ------
+class Reconciliation(models.Model):
+    STATUS_CHOICES = [
+        ('matched', 'Matched'),
+        ('variance', 'Variance'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.OneToOneField(ScanSession, on_delete=models.CASCADE, unique=True)
+    scanned_value = models.DecimalField(max_digits=10, decimal_places=2, help_text='Sum of all ScannedData.item.price for this session')
+    expected_cash = models.DecimalField(max_digits=10, decimal_places=2, help_text='Operator-entered till/cash amount')
+    variance = models.DecimalField(max_digits=10, decimal_places=2, editable=False, help_text='expected_cash - scanned_value')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='matched')
+    reason = models.TextField(blank=True, help_text='Why there is variance (if any)')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"Reconciliation {self.session.id}: scanned={self.scanned_value} expected={self.expected_cash} variance={self.variance} {self.status}"
+
+
+# ------ PASSWORD RESET TOKEN TABLE ------
+class PasswordResetToken(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='password_reset_tokens')
+    token_hash = models.CharField(max_length=128, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Reset token for {self.user.username} (used: {self.used_at is not None})"
+
+
+# ------ REVERSAL TABLE ------
+class Reversal(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    transaction = models.OneToOneField(Transaction, on_delete=models.CASCADE, unique=True)
+    reversed_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reversals', help_text='Operator/admin who voided the transaction'
+    )
+    reason = models.TextField(help_text='Reason for reversal')
+    ref = models.CharField(max_length=50, blank=True, help_text='Optional reversal reference number')
+    reversed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-reversed_at']
+        indexes = [
+            models.Index(fields=['transaction', 'reversed_at']),
+        ]
+
+    def __str__(self):
+        return f"Reversal {self.transaction.id} by {self.reversed_by.username if self.reversed_by else '?'} at {self.reversed_at}"
+
+
+# ------ AUDIT LOG TABLE ------
+class AuditLog(models.Model):
+    ACTION_CHOICES = [
+        ('create', 'Create'),
+        ('update', 'Update'),
+        ('deactivate', 'Deactivate'),
+        ('activate', 'Activate'),
+        ('delete', 'Delete'),
+        ('approve', 'Approve'),
+        ('reverse', 'Reverse'),
+        ('replace', 'Replace'),
+        ('login', 'Login'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    actor = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    content_type = models.ForeignKey('contenttypes.ContentType', on_delete=models.SET_NULL, null=True, blank=True)
+    object_id = models.CharField(max_length=64, null=True, blank=True)
+    object_repr = models.CharField(max_length=255, blank=True)
+    before = models.JSONField(null=True, blank=True)
+    after = models.JSONField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    path = models.CharField(max_length=512, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['timestamp']),
+            models.Index(fields=['actor', 'timestamp']),
+            models.Index(fields=['action', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.timestamp} {self.actor} {self.action} {self.object_repr}"
+
+
+# ------ SMS DELIVERY LOG ------
+class SMSLog(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+        ('skipped_opt_out', 'Skipped - Opt Out'),
+        ('skipped_rate_limit', 'Skipped - Rate Limited'),
+        ('skipped_no_phone', 'Skipped - No Phone'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='sms_logs')
+    notification = models.ForeignKey(Notification, on_delete=models.SET_NULL, null=True, blank=True, related_name='sms_logs')
+    phone = models.CharField(max_length=20)
+    body = models.TextField()
+    provider = models.CharField(max_length=30, default='log')
+    provider_sid = models.CharField(max_length=128, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error = models.TextField(null=True, blank=True)
+    segments = models.PositiveSmallIntegerField(default=1)
+    cost_estimate = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'created_at']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"SMS to {self.phone} {self.status} ({self.provider})"

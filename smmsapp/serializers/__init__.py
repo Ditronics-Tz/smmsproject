@@ -1,3 +1,3 @@
-from .ResourceSerializers import *
+from .resources import *
 
-from .AuthSerializers import *
+from .auth import *

@@ -14,7 +14,14 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 from celery.schedules import crontab
+
+# Load environment variables from the .env file FIRST so that every setting
+# below reads the real (rotated) values. Placing this here rather than further
+# down fixes a bug where SECRET_KEY and DB_PASSWORD were read before .env was
+# loaded, silently falling back to committed defaults.
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,22 +32,41 @@ AUTH_USER_MODEL = 'smmsapp.CustomUser'
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
+
+def require_env(name: str) -> str:
+    """Read a required env var, failing loudly if it is missing or empty.
+
+    Used for secrets that MUST NOT fall back to a default. A misconfigured
+    deployment should refuse to start rather than silently run with a
+    publicly-known key or password.
+    """
+    value = os.getenv(name)
+    if not value:
+        raise ImproperlyConfigured(
+            f"Missing required environment variable: {name}"
+        )
+    return value
+
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-!hea+%$-fy)8!6=fu3@7hqrc&i5)2fqu+r0hxj92-$r62lsup@')
+# No default: the service refuses to start unless SECRET_KEY is provided.
+SECRET_KEY = require_env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+# Fail-safe: DEBUG defaults to False. A missing/unset DEBUG env var must NOT
+# silently enable debug mode. Dev environments set DEBUG=True explicitly.
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,ditronics.co.tz,adhimkitchen.ditronics.co.tz,www.adhimkitchen.ditronics.co.tz,backend1.ditronics.co.tz').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Origin lists are read from the environment so each deployment (staging vs
+# prod) ships its own explicit list. Changing the lists requires no code edit.
+# Values are comma-separated; an empty/unset var yields an empty list (closed by default).
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://ditronics.co.tz:8000",
-    "http://diatronis.co.tz:3000",
-    "https://adhimkitchen.ditronics.co.tz",
-    "https://www.adhimkitchen.ditronics.co.tz",
-    "https://backend1.ditronics.co.tz"
+    o for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o
+]
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o
 ]
 
 CORS_ALLOW_ALL_ORIGINS = False
@@ -49,19 +75,26 @@ CORS_ALLOW_CREDENTIALS = True  # Allow cookies, tokens, and authentication crede
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-CSRF_TRUSTED_ORIGINS = ["https://31.220.82.177","https://backend1.ditronics.co.tz"]
+# HTTPS considerations:
+#  - Nginx terminates TLS at the edge and redirects HTTP->HTTPS, so the app does
+#    not force its own redirect. Keep SECURE_SSL_REDIRECT off behind that proxy;
+#    enable it only when the app itself terminates TLS.
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
+if os.getenv('SECURE_HSTS_SECONDS', ''):
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'True') == 'True'
+    SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'True') == 'True'
 
-SECURE_SSL_REDIRECT = False # Redirects all HTTP traffic to HTTPS
-SESSION_COOKIE_SECURE = True  # Ensures session cookies are only sent over HTTPS
-CSRF_COOKIE_SECURE = True  # Ensures CSRF cookies are only sent over HTTPS
-
-# Load environment variables from .env file
-load_dotenv()
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True') == 'True'  # HTTPS only
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'True') == 'True'  # HTTPS only
 
 # ---- FIREBASE SETUP
 FIREBASE_API_KEY = os.getenv('FIREBASE_API_KEY')
 FIREBASE_SENDER_ID = os.getenv('FIREBASE_SENDER_ID')
 FIREBASE_PROJECT_ID=os.getenv('FIREBASE_PROJECT_ID')
+
+# ---- API BASE URL ----
+API_BASE_URL = os.getenv('API_BASE_URL', 'http://127.0.0.1:8000')
 
 # ---- EMAIL CONDIFURATIONS ----
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -85,7 +118,18 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.send_pending_notifications",
         "schedule": crontab(minute="*/5"),  # Run every 5 minutes
     },
+    "check-balance-thresholds": {
+        "task": "smmsapp.tasks.check_balance_thresholds",
+        "schedule": crontab(hour="*/6"),  # Run every 6 hours
+    },
+    "audit-purge": {
+        "task": "smmsapp.tasks.audit_purge",
+        "schedule": crontab(hour=2, minute=0),  # Daily 02:00
+    },
 }
+
+# Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
+DEFAULT_BALANCE_THRESHOLD = '1000.00'
 
 
 # Application definition
@@ -99,6 +143,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'drf_spectacular',
     'smmsapp',
     'corsheaders',
 ]
@@ -111,6 +156,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'smmsapp.middleware.audit.AuditMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -141,7 +187,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('DB_NAME', 'smmsdb'),
         'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', '123456789'),
+        'PASSWORD': require_env('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }
@@ -175,9 +221,34 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 5
+    'PAGE_SIZE': 5,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',             # global anonymous ceiling
+        'login': '5/min',             # brute-force / credential-enumeration guard
+        'forget_password': '3/min',   # account-enumeration guard
+    },
 }
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'SMMS API',
+    'DESCRIPTION': 'Student Meal Management System API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+
+AUDIT_RETENTION_DAYS = int(os.getenv('AUDIT_RETENTION_DAYS', '365'))
+
+# SMS (Tanzania feature-phone coverage) - abstraction over Twilio / Beem Africa / log
+SMS_PROVIDER = os.getenv('SMS_PROVIDER', 'log')  # log | twilio | beem
+SMS_DAILY_LIMIT = int(os.getenv('SMS_DAILY_LIMIT', '3'))
+SMS_MONTHLY_LIMIT = int(os.getenv('SMS_MONTHLY_LIMIT', '10000'))
 
 # ---- ACCESS AND REFRESH TOKEN -----
 SIMPLE_JWT = {

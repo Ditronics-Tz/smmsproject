@@ -58,7 +58,7 @@ def send_pending_notifications():
                     html_content = render_to_string("email_template.html", {
                         "user": notification.recipient,
                         "notification": notification,
-                        "action_url": "http://adhimkitchen.ditronics.co.tz/"  # Change as needed
+                        "action_url": settings.API_BASE_URL.rstrip('/') + '/admin'
                     })
                     
                     try:
@@ -104,3 +104,68 @@ def send_pending_notifications():
                     break  # Exit retry loop after reaching max retries
 
     return "Notification processing complete."
+
+
+@shared_task
+def check_balance_thresholds():
+    """Periodic sweep: raise low-balance reminders for students whose active card
+    balance is below their parent's threshold (once per day)."""
+    from .services.alerts import sweep_low_balances
+    created = sweep_low_balances()
+    logger.info(f"Low-balance sweep complete. {created} reminder(s) created.")
+    return f"{created} reminder(s) created."
+
+
+@shared_task
+def audit_purge():
+    from datetime import timedelta
+    from django.conf import settings
+    from django.utils.timezone import now as tz_now
+    from .models import AuditLog
+    days = getattr(settings, 'AUDIT_RETENTION_DAYS', 365)
+    cutoff = tz_now() - timedelta(days=days)
+    deleted, _ = AuditLog.objects.filter(timestamp__lt=cutoff).delete()
+    logger.info(f"Audit purge: deleted {deleted} rows older than {cutoff}")
+    return deleted
+
+
+@shared_task
+def generate_export_task(entity, filename, user_id, filters):
+    """Asynchronously build an export file and notify the requesting user.
+
+    The download endpoint later serves the file using the signed token that was
+    returned to the client at request time.
+    """
+    from datetime import date
+
+    from django.shortcuts import get_object_or_404
+
+    from .models import CustomUser, Notification
+    from .views.exports import _write_export
+
+    user = get_object_or_404(CustomUser, id=user_id)
+
+    clean_filters = {}
+    for key, value in filters.items():
+        if value in (None, ''):
+            clean_filters[key] = None
+            continue
+        if key in ('from_date', 'to_date') and isinstance(value, str):
+            try:
+                clean_filters[key] = date.fromisoformat(value)
+            except ValueError:
+                clean_filters[key] = None
+        else:
+            clean_filters[key] = value
+
+    _write_export(entity, filename, user, clean_filters)
+
+    Notification.objects.create(
+        recipient=user,
+        title='Export Ready',
+        message=f'Your {entity} export is ready for download.',
+        status='pending',
+        type='reminder',
+    )
+    logger.info(f"Export {entity} -> {filename} generated for user {user_id}")
+    return filename

@@ -1,7 +1,13 @@
 uploads/uploads/*
 db.sqlite3
-__pycach__/
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+# Django runtime artifacts
+static/
+.cache/
+celerybeat-schedule
 *.pyo
 *.pyd
 venv/

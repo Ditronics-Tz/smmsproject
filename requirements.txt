@@ -64,3 +64,5 @@ weasyprint==64.0
 webencodings==0.5.1
 yarl==1.18.3
 zopfli==0.2.3.post1
+openpyxl==3.1.5
+drf-spectacular==0.27.2

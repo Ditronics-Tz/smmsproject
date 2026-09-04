@@ -8,11 +8,16 @@
 # ============================================================================
 FROM python:3.12-slim-bookworm AS builder
 
+# Pull in uv's static binary for fast, deterministic package management
+COPY --from=ghcr.io/astral-sh/uv:0.12.7 /uv /uvx /bin/
+
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_NO_CACHE=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH"
 
 # Install system dependencies required for building Python packages
 # WeasyPrint requires: pango, cairo, gdk-pixbuf, libffi, glib
@@ -31,17 +36,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
-RUN python -m venv /opt/venv
+# Create virtual environment with uv
+RUN uv venv /opt/venv
 
-# Activate virtual environment
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Copy requirements and install Python dependencies
+# Copy requirements and install Python dependencies with uv
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r /tmp/requirements.txt && \
-    pip install --no-cache-dir gunicorn whitenoise
+RUN uv pip install -r /tmp/requirements.txt && \
+    uv pip install gunicorn whitenoise
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image

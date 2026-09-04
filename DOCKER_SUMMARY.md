@@ -86,6 +86,8 @@
 | None | N/A | Code baked into image |
 | `postgres_data` | `/var/lib/postgresql/data` | Database persistence |
 | `redis_data` | `/data` | Redis persistence |
+| `static_assets` | `/app/static` | Static files (Whitenoise) |
+| `media_files` | `/app/uploads` | User-uploaded content (profile pictures, etc.) |
 
 ---
 

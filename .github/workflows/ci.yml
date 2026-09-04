@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: smmsdb
+          POSTGRES_USER: postgres
+          # CI-only credentials — ephemeral container, never reused or deployed
+POSTGRES_PASSWORD: 123456789
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: ci-insecure-key-just-for-tests
+      DEBUG: "False"
+      DB_NAME: smmsdb
+      DB_USER: postgres
+      DB_PASSWORD: 123456789
+      DB_HOST: localhost
+      DB_PORT: "5432"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies (WeasyPrint, PostgreSQL client)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpq-dev \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libgdk-pixbuf2.0-0 \
+            libffi-dev \
+            libcairo2 \
+            libglib2.0-0 \
+            shared-mime-info
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.12.7"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: uv pip install --system -r requirements.txt
+
+      - name: Run Django checks
+        run: python manage.py check
+
+      - name: Generate OpenAPI schema
+        run: |
+          python manage.py spectacular --file schema.yml --validate --fail-on-warn
+          ls -lh schema.yml
+
+      - name: Upload schema artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-schema
+          path: schema.yml
+
+      - name: Run test suite
+        run: python manage.py test smmsapp.tests

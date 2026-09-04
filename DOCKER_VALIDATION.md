@@ -53,6 +53,7 @@ This document validates that all required Docker configuration files have been c
 - ✅ Service dependencies configured
 - ✅ Custom network (smms_network)
 - ✅ Named volumes for data persistence
+- ✅ Named volumes for static & media: static_assets, media_files
 
 ---
 
