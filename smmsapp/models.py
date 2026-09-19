@@ -216,7 +216,7 @@ class Transaction(models.Model):
     transaction_date = models.DateTimeField(auto_now_add=True)
     transaction_status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     session = models.ForeignKey(
-        ScanSession, on_delete=models.SET_NULL, null=True, blank=True, db_index=True,
+        'ScanSession', on_delete=models.SET_NULL, null=True, blank=True, db_index=True,
         help_text='Scan session that produced this transaction (for audit & reversal)'
     )
     is_voided = models.BooleanField(default=False, db_index=True, help_text='Set when a reversal restores the balance')
