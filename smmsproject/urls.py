@@ -18,14 +18,16 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf.urls.static import static
 from . import settings
-from smmsapp.views.health import HealthView, StatusView
+from smmsapp.views.health import (
+    HealthView, HealthViewSlashAlias, StatusView, StatusViewSlashAlias,
+)
 
 urlpatterns = [
     path('admin-auth/', admin.site.urls),
     path('health', HealthView.as_view(), name='health'),
-    path('health/', HealthView.as_view(), name='health-slash'),
+    path('health/', HealthViewSlashAlias.as_view(), name='health-slash'),
     path('status', StatusView.as_view(), name='status'),
-    path('status/', StatusView.as_view(), name='status-slash'),
+    path('status/', StatusViewSlashAlias.as_view(), name='status-slash'),
     path('',include('smmsapp.urls.admin')),
     path('api-auth/', include('rest_framework.urls')),
     # Legacy unversioned paths (dual-serve during migration)

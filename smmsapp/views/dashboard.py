@@ -12,8 +12,12 @@ from ..utils import generate_end_of_day_report, generate_parent_end_of_day_repor
 from ..models import ParentStudent, RFIDCard, Transaction, CustomUser, ScanSession, ScannedData, CanteenItem
 from ..serializers.dashboard import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly, IsOperator, IsAdminOrOperator
+from ..serializers.system import CodeMessageSerializer
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 #  ----- API FOR COUNTS IN DASHBOARD ------
+@extend_schema(tags=['dashboard'], request=None, responses=CountsSerializer)
 class CountsView(APIView):
     permission_classes = [IsAdminOrOperator]
 
@@ -74,6 +78,9 @@ class CountsView(APIView):
 
 
 # ----- API FOR SALES SUMMARY ------
+@extend_schema(
+    tags=['dashboard'], request=SalesSummaryRequestSerializer,
+    responses={200: SalesSummarySerializer, 400: CodeMessageSerializer})
 class SalesSummaryView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -115,6 +122,7 @@ class SalesSummaryView(APIView):
 
 
 # ----- API FOR WEEKLY SALES TRANS --------
+@extend_schema(tags=['dashboard'], request=None, responses=WeeklySalesSerializer(many=True))
 class WeeklySalesTrendView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -145,6 +153,13 @@ class WeeklySalesTrendView(APIView):
     
 
 # ---- API FOR GET REPORT --------
+@extend_schema(
+    tags=['dashboard'],
+    responses={
+        200: OpenApiResponse(OpenApiTypes.BINARY, description='End-of-day PDF report'),
+        403: CodeMessageSerializer,
+    },
+)
 class EndOfDayReportView(APIView):
     """Generate and download End-of-Day report"""
     permission_classes = [IsAdminOrParent]  # Only Admins can access
@@ -165,6 +180,11 @@ class EndOfDayReportView(APIView):
     
 
 # ----- API FOR LAST SESSION DETAILS ------
+@extend_schema(
+    tags=['dashboard'],
+    request=None,
+    responses={200: LastSessionDetailsSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer},
+)
 class LastSessionDetailsView(APIView):
     """API to return the last session details for an operator."""
     permission_classes = [IsOperator]
@@ -201,6 +221,9 @@ class LastSessionDetailsView(APIView):
     
 
 # API FOR RETURN PARENT'S STUDENT DETAILS
+@extend_schema(
+    tags=['dashboard'], request=None,
+    responses={200: FullStudentSerializer(many=True), 403: CodeMessageSerializer})
 class ParentStudentsView(APIView):
     permission_classes = [IsAdminOrParent]
 
@@ -220,6 +243,9 @@ class ParentStudentsView(APIView):
 
 
 # API FOR PARENT'S CHILD SPEND BREAKDOWN (WEEK / MONTH)
+@extend_schema(
+    tags=['dashboard'], request=ChildSpendRequestSerializer,
+    responses={200: ChildSpendPeriodSerializer, 403: CodeMessageSerializer})
 class ChildSpendView(APIView):
     """Return aggregated spend per child for the current week or month,
     broken down per item. Parents only see their own children."""
@@ -298,6 +324,9 @@ class ChildSpendView(APIView):
 
 
 # API FOR RETURN STAFF'S DETAILS
+@extend_schema(
+    tags=['dashboard'], request=None,
+    responses={200: FullStaffSerializer, 403: CodeMessageSerializer})
 class StaffView(APIView):
     permission_classes = [IsAdminOrParent]
 

@@ -11,7 +11,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import Notification
-from ..serializers.exports import ExportRequestSerializer
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+
+from ..serializers.exports import (
+    ExportAcceptedSerializer, ExportPendingSerializer, ExportRequestSerializer,
+)
+from ..serializers.system import CodeMessageSerializer
 from ..services.exporter import (
     ENTITY_BUILDERS, EXPORT_SYNC_MAX_ROWS,
     export_to_csv, export_to_xlsx,
@@ -61,6 +67,15 @@ def _write_export(entity, filename, user, filters):
     return path, rows
 
 
+@extend_schema(
+    tags=['exports'],
+    request=ExportRequestSerializer,
+    responses={
+        200: OpenApiResponse(OpenApiTypes.BINARY, description='CSV or XLSX attachment'),
+        202: ExportAcceptedSerializer,
+        400: CodeMessageSerializer,
+    },
+)
 class BaseExportView(APIView):
     permission_classes = [IsAuthenticated]
     entity = None  # set by subclass
@@ -141,6 +156,14 @@ class DepositExportView(BaseExportView):
     entity = 'deposits'
 
 
+@extend_schema(
+    tags=['exports'],
+    responses={
+        200: OpenApiResponse(OpenApiTypes.BINARY, description='CSV or XLSX attachment'),
+        202: ExportPendingSerializer,
+        404: CodeMessageSerializer,
+    },
+)
 class ExportDownloadView(APIView):
     permission_classes = [IsAuthenticated]
 

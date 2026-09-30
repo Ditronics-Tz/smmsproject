@@ -33,6 +33,11 @@ class ProcessDepositSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)
 
 
+class CreateDepositSerializer(serializers.Serializer):
+    card_number = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
 class LedgerEntrySerializer(serializers.ModelSerializer):
     card_number = serializers.CharField(source='rfid_card.card_number', read_only=True)
     event_type_display = serializers.CharField(source='get_event_type_display', read_only=True)
@@ -84,5 +89,5 @@ class CardLedgerViewSerializer(serializers.Serializer):
     balance_after = serializers.DecimalField(max_digits=10, decimal_places=2)
     description = serializers.SerializerMethodField()
 
-    def get_description(self, obj):
+    def get_description(self, obj) -> str:
         return str(obj)

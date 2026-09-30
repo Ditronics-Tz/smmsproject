@@ -241,6 +241,23 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
+    # Several models define their own STATUS_CHOICES and TYPE_CHOICES, so the
+    # generated enums collided on the shared field names ("status", "type") and
+    # on "action". Model choice sets are referenced by dotted path so the
+    # override hashes always match the real (value, label) pairs and never drift
+    # out of sync with the model definitions.
+    'ENUM_NAME_OVERRIDES': {
+        'ActivateDeactivateEnum': ['activate', 'deactivate'],
+        'DepositActionEnum': [('process', 'Process'), ('fail', 'Fail')],
+        'SessionTypeEnum': 'smmsapp.models.ScanSession.SESSION_TYPE_CHOICES',
+        'NotificationTypeEnum': 'smmsapp.models.Notification.TYPE_CHOICES',
+        'DepositStatusEnum': 'smmsapp.models.BankDeposit.STATUS_CHOICES',
+        'SessionStatusEnum': 'smmsapp.models.ScanSession.STATUS_CHOICES',
+        'TransactionStatusEnum': 'smmsapp.models.Transaction.STATUS_CHOICES',
+        'NotificationStatusEnum': 'smmsapp.models.Notification.STATUS_CHOICES',
+        'ReconciliationStatusEnum': 'smmsapp.models.Reconciliation.STATUS_CHOICES',
+        'SMSLogStatusEnum': 'smmsapp.models.SMSLog.STATUS_CHOICES',
+    },
 }
 
 AUDIT_RETENTION_DAYS = int(os.getenv('AUDIT_RETENTION_DAYS', '365'))

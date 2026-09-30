@@ -1,4 +1,6 @@
 from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiResponse
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
@@ -15,6 +17,10 @@ from ..serializers.imports import (
 TEMPLATE_CTYPE = 'text/csv'
 
 
+@extend_schema(
+    tags=['imports'],
+    responses={200: OpenApiResponse(OpenApiTypes.BINARY, description='CSV template')},
+)
 class ImportTemplateView(APIView):
     """Download a CSV template (header + one sample row) for bulk onboarding."""
     permission_classes = [IsAdminOnly]

@@ -7,8 +7,13 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Q
 from ..models import *
-from ..serializers.sessions import ScanSessionSerializer, ScannedDataSerializer, TransactionSerializer
+from ..serializers.sessions import (
+    EndSessionRequestSerializer, EndSessionResponseSerializer, ScanRFIDRequestSerializer,
+    ScanSessionSerializer, ScannedDataSerializer, SessionListRequestSerializer,
+    StartSessionRequestSerializer, TransactionListRequestSerializer, TransactionSerializer,
+)
 from drf_spectacular.utils import extend_schema
+from ..serializers.system import CodeMessageSerializer
 from django.utils import timezone
 from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminOrParent, IsAdminOnly
 from ..services.audit import log_action, snapshot
@@ -16,7 +21,8 @@ from ..utils import get_admin_scope
 
 
 # --- API FOR SCAN RFID CARD ----- THIS IS THE MAIN FUNCTIONALITY OF THIS SYSTEM -----
-@extend_schema(tags=['sessions'])
+@extend_schema(tags=['sessions'], request=ScanRFIDRequestSerializer,
+    responses={201: ScannedDataSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class ScanRFIDCardView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -171,6 +177,7 @@ class ScanRFIDCardView(APIView):
 
 
 # --- API FOR GET ACTIVE SESSION -----
+@extend_schema(tags=['sessions'], responses={200: ScanSessionSerializer, 404: CodeMessageSerializer})
 class ActiveSessionView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -187,6 +194,8 @@ class ActiveSessionView(APIView):
         
 
 # ---- API FOR START SESSION ----
+@extend_schema(tags=['sessions'], request=StartSessionRequestSerializer,
+    responses={201: ScanSessionSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer})
 class StartScanSessionView(APIView):
     permission_classes = [IsOperator]
 
@@ -210,6 +219,8 @@ class StartScanSessionView(APIView):
 
 
 # --- API FOR END SESSION -----
+@extend_schema(tags=['sessions'], request=EndSessionRequestSerializer,
+    responses={200: EndSessionResponseSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class EndScanSessionView(APIView):
     permission_classes = [IsOperator]
 
@@ -282,6 +293,8 @@ class EndScanSessionView(APIView):
 
 
 # ----- API FOR GET SESSION LIST -----
+@extend_schema(tags=['sessions'], request=SessionListRequestSerializer,
+    responses={200: ScanSessionSerializer(many=True), 403: CodeMessageSerializer})
 class SessionListView(APIView):
     permission_classes = [IsAdminOrOperator]
 
@@ -339,7 +352,8 @@ class ScannedDataListView(APIView, PageNumberPagination):
 
 
 # ---- API FOR FETCH TRANSACTIONSERIALIZER -----
-@extend_schema(tags=['sessions'])
+@extend_schema(tags=['sessions'], request=TransactionListRequestSerializer,
+    responses={200: TransactionSerializer(many=True), 403: CodeMessageSerializer})
 class TransactionListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminOrParent]
     page_size = 50
