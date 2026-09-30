@@ -5,18 +5,28 @@ from rest_framework import status, generics
 from drf_spectacular.utils import extend_schema
 from django_filters.rest_framework import DjangoFilterBackend
 from ..models import SMSLog
-from ..serializers.sms import SMSLogSerializer
+from ..serializers.sms import (
+    SMSLogSerializer, SMSOptOutRequestSerializer, SMSOptOutSerializer,
+)
+from ..serializers.system import CodeMessageSerializer
 
-@extend_schema(tags=['sms'])
+
+@extend_schema(
+    tags=['sms'],
+    request=SMSOptOutRequestSerializer,
+    responses={200: SMSOptOutSerializer, 400: CodeMessageSerializer},
+)
 class SMSOptOutView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(request={"type": "object", "properties": {"sms_opt_out": {"type": "boolean"}}}, responses={200: {"type": "object"}})
     def post(self, request):
-        opt_out = request.data.get("sms_opt_out")
-        if opt_out is None:
-            return Response({"code": 400, "message": "sms_opt_out required"}, status=status.HTTP_400_BAD_REQUEST)
-        request.user.sms_opt_out = bool(opt_out)
+        serializer = SMSOptOutRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {'code': 400, 'message': 'sms_opt_out required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        request.user.sms_opt_out = serializer.validated_data['sms_opt_out']
         request.user.save(update_fields=["sms_opt_out"])
         return Response({"sms_opt_out": request.user.sms_opt_out})
 
@@ -34,3 +44,15 @@ class SMSLogListView(generics.ListAPIView):
         if phone:
             qs = qs.filter(phone__icontains=phone)
         return qs
+
+
+# Trailing-slash aliases kept for backwards compatibility; the canonical paths
+# are '/sms/opt-out' and '/sms/logs' and are the only ones documented.
+@extend_schema(exclude=True)
+class SMSOptOutViewSlashAlias(SMSOptOutView):
+    pass
+
+
+@extend_schema(exclude=True)
+class SMSLogListViewSlashAlias(SMSLogListView):
+    pass

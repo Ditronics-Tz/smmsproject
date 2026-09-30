@@ -12,6 +12,11 @@ import secrets
 import hashlib
 from datetime import timedelta
 from drf_spectacular.utils import extend_schema, OpenApiResponse
+from ..serializers.resources import (
+    ChangePasswordRequestSerializer, LogoutRequestSerializer,
+    UserActivateDeactivateSerializer,
+)
+from ..serializers.system import CodeMessageSerializer, ErrorSerializer, MessageSerializer
 from django.utils import timezone
 from ..serializers.auth import (
     UserCreateSerializer, AuthUserSerializer, LoginSerializer,
@@ -68,6 +73,8 @@ class LoginView(APIView):
 
 
 # User Logout API (Blacklist Token)
+@extend_schema(tags=['auth'], request=LogoutRequestSerializer,
+    responses={205: MessageSerializer, 400: ErrorSerializer})
 class LogoutView(APIView):
     permission_classes = [AllowAny]
     # queryset = User.objects.all()
@@ -169,6 +176,7 @@ class EditUserView(generics.UpdateAPIView):
 
 
 # API FOR ACTIVATE AND DEACTIVATE USER
+@extend_schema(tags=['auth'], request=UserActivateDeactivateSerializer, responses=CodeMessageSerializer)
 class ActivateDeactivateUserView(APIView):
     permission_classes = [IsAdminOnly]
     queryset = User.objects.all()
@@ -353,6 +361,8 @@ class ConfirmPasswordResetView(APIView):
         return Response({'message': 'Password reset successfully. You can now log in.'}, status=status.HTTP_200_OK)
 
 
+@extend_schema(tags=['auth'], request=ChangePasswordRequestSerializer,
+    responses={200: MessageSerializer, 400: CodeMessageSerializer})
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
     queryset = User.objects.all()

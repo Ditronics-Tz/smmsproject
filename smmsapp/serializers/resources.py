@@ -1,4 +1,61 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
+
+
+# ---- SHARED REQUEST BODIES FOR THE APIView ENDPOINTS ----
+class SearchRequestSerializer(serializers.Serializer):
+    search = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class UserListRequestSerializer(SearchRequestSerializer):
+    role = serializers.CharField(required=False, allow_blank=True)
+
+
+class StudentIdRequestSerializer(serializers.Serializer):
+    student_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class ParentIdRequestSerializer(serializers.Serializer):
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class StaffIdRequestSerializer(serializers.Serializer):
+    staff_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class OperatorIdRequestSerializer(serializers.Serializer):
+    operator_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class ItemIdRequestSerializer(serializers.Serializer):
+    item_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class CardIdRequestSerializer(serializers.Serializer):
+    card_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class CardActivateDeactivateSerializer(serializers.Serializer):
+    card_id = serializers.UUIDField(required=False, allow_null=True)
+    action = serializers.ChoiceField(choices=['activate', 'deactivate'], required=False)
+
+
+class UserActivateDeactivateSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField(required=False, allow_null=True)
+    action = serializers.ChoiceField(choices=['activate', 'deactivate'], required=False)
+
+
+class SchoolIdRequestSerializer(serializers.Serializer):
+    school_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class LogoutRequestSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=False, allow_blank=True)
+
+
+class ChangePasswordRequestSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=False, allow_blank=True)
+    new_password = serializers.CharField(required=False, allow_blank=True)
 from ..models import *
 from django.db.models import Q
 from datetime import datetime
@@ -52,12 +109,20 @@ class TransactionSerializer(serializers.ModelSerializer):
         model =  Transaction
         fields = ['id','amount','student_name', 'card_number','item_name','transaction_date','transaction_status']
 
-    def get_student_name(self, obj):
+    def get_student_name(self, obj) -> str:
         return f'{obj.student_or_staff.first_name} {obj.student_or_staff.last_name}'
 
 
 # ---- SESSION INFO -----
+@extend_schema_serializer(component_name='OperatorSessionSummary')
 class ScanSessionSerializer(serializers.ModelSerializer):
+    """Compact session summary embedded in operator detail responses.
+
+    Distinct from the session API's ScanSessionSerializer (which includes the
+    operator), so it carries its own component name to avoid a name collision
+    that would serve the wrong shape to one of the two endpoints.
+    """
+
     class Meta:
         model = ScanSession
         fields = ['id','status', 'type', 'start_at','end_at', 'updated_at']
@@ -91,14 +156,17 @@ class FullStudentSerializer(serializers.ModelSerializer):
         fields = ['id','first_name','middle_name',  'last_name','gender', 'class_room',
                   'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents']
 
+    @extend_schema_field(RFIDCardSerializer(allow_null=True))
     def get_rfid_card(self, obj):
         card = obj.rfid_cards.filter(is_active=True).first()
         return RFIDCardSerializer(card).data if card else None
 
+    @extend_schema_field(ParentSerializer(many=True))
     def get_parents(self, obj):
         parents = ParentStudent.objects.filter(student=obj).select_related('parent')
         return ParentSerializer([parent.parent for parent in parents], many = True).data
         
+    @extend_schema_field(TransactionSerializer(many=True))
     def get_transactions(self, obj):
         transactions = Transaction.objects.filter(student_or_staff=obj).order_by('-transaction_date')[:10]
         return TransactionSerializer(transactions, many=True).data
@@ -116,10 +184,12 @@ class FullStaffSerializer(serializers.ModelSerializer):
         fields = ['id','first_name','middle_name', 'last_name','gender', 'email', 'username', 'mobile_number',
                   'school', 'school_id','profile_picture', 'rfid_card', 'transactions', ]
         
+    @extend_schema_field(RFIDCardSerializer(allow_null=True))
     def get_rfid_card(self, obj):
         card = obj.rfid_cards.filter(is_active=True).first()
         return RFIDCardSerializer(card).data if card else None
 
+    @extend_schema_field(TransactionSerializer(many=True))
     def get_transactions(self, obj):
         transactions = Transaction.objects.filter(student_or_staff=obj).order_by('-transaction_date')[:10]
         return TransactionSerializer(transactions, many=True).data
@@ -135,6 +205,7 @@ class FullParentSerializer(serializers.ModelSerializer):
         fields = ['id','first_name', 'username','middle_name',  'last_name', 'parent_type','email', 'mobile_number','gender',
                   'school', 'students']
         
+    @extend_schema_field(StudentSerializer(many=True))
     def get_students(self, obj):
         students = ParentStudent.objects.filter(parent=obj).select_related('student')
         return StudentSerializer([student.student for student in students],many=True).data
@@ -151,6 +222,7 @@ class FullOperatorSerializer(serializers.ModelSerializer):
         fields = ['id','first_name','middle_name', 'last_name','username','email', 'mobile_number','gender',
                   'school', 'sessions','school_id']
         
+    @extend_schema_field(ScanSessionSerializer(many=True))
     def get_sessions(self, obj):
         sessions = ScanSession.objects.filter(operator=obj).select_related('operator')
         return ScanSessionSerializer([session for session in sessions],many=True).data
@@ -255,10 +327,10 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'message', 'status', 'title', 'type', 'created_at', 'recipient']
 
-    def get_recipient(self,obj):
+    def get_recipient(self, obj) -> str:
         return f'{obj.recipient.first_name} {obj.recipient.last_name}'
 
-    def get_message(self, obj):
+    def get_message(self, obj) -> str:
         # Defense-in-depth: never surface a password payload through the API.
         # New rows no longer store plaintext passwords, and a data migration
         # scrubbed historical ones; this guards against any residual leak.

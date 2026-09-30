@@ -13,9 +13,13 @@ from ..models import (
     RFIDCard, BankDeposit, Transaction, LedgerEntry,
     ScanSession, Reconciliation, Reversal, CustomUser,
 )
+from drf_spectacular.utils import extend_schema
+from ..serializers.system import CodeMessageSerializer
+from ..serializers.resources import TransactionSerializer
 from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminOrParent
 from ..services.audit import log_action, snapshot
 from ..serializers.wallet import (
+    CreateDepositSerializer,
     BankDepositSerializer, ProcessDepositSerializer, LedgerEntrySerializer,
     ReconciliationSerializer, ReversalSerializer, CardLedgerViewSerializer,
     CardLedgerPagination,
@@ -26,6 +30,8 @@ from ..serializers.wallet import (
 # Deposit (top-up) flow
 # ---------------------------
 
+@extend_schema(tags=['wallet'], request=CreateDepositSerializer,
+    responses={201: BankDepositSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class CreateDepositView(APIView):
     """Parent submits a top-up deposit request for one of their children's cards."""
     permission_classes = [IsAdminOrParent]
@@ -109,6 +115,8 @@ class DepositListView(generics.ListAPIView):
         return BankDeposit.objects.filter(submitted_by=user).order_by('-created_at')
 
 
+@extend_schema(tags=['wallet'], request=ProcessDepositSerializer,
+    responses={200: BankDepositSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class ProcessDepositView(APIView):
     """Admin/operator approves or fails a pending deposit.
     On approval: credits RFIDCard.balance atomically (select_for_update),
@@ -234,6 +242,8 @@ class CardLedgerView(generics.ListAPIView):
 # Transaction reversal (void)
 # ---------------------------
 
+@extend_schema(tags=['wallet'], request=ReversalSerializer,
+    responses={200: TransactionSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer, 409: CodeMessageSerializer})
 class ReverseTransactionView(APIView):
     """Admin/operator voids a transaction, restoring the exact amount to the card balance.
     Idempotent: cannot be applied twice (transaction.is_voided guard + unique Reversal row).

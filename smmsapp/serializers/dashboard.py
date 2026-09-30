@@ -13,6 +13,12 @@ class CountsSerializer(serializers.Serializer):
     price_today = serializers.IntegerField()
 
 # ---- SALES SUMMARY SERIALIZER -----
+class SalesSummaryRequestSerializer(serializers.Serializer):
+    filter = serializers.ChoiceField(
+        choices=['day', 'month', 'year'], default='day', required=False,
+    )
+
+
 class SalesSummarySerializer(serializers.Serializer):
     total_success_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     total_penalts_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
@@ -35,6 +41,14 @@ class ItemSpendSerializer(serializers.Serializer):
 
 
 # ---- CHILD SPEND SERIALIZER -----
+class ChildSpendRequestSerializer(serializers.Serializer):
+    period = serializers.ChoiceField(
+        choices=['week', 'month'], default='week', required=False,
+    )
+    start_date = serializers.DateField(required=False, allow_null=True)
+    child_id = serializers.UUIDField(required=False, allow_null=True)
+
+
 class ChildSpendSerializer(serializers.Serializer):
     child_id = serializers.UUIDField()
     child_name = serializers.CharField()
@@ -43,3 +57,21 @@ class ChildSpendSerializer(serializers.Serializer):
     transaction_count = serializers.IntegerField()
     penalty_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     items = ItemSpendSerializer(many=True, required=False)
+
+
+# ---- CHILD SPEND PERIOD WRAPPER -----
+class ChildSpendPeriodSerializer(serializers.Serializer):
+    period = serializers.CharField()
+    start_date = serializers.DateField()
+    children = ChildSpendSerializer(many=True)
+
+
+# ---- LAST SESSION DETAILS -----
+class LastSessionDetailsSerializer(serializers.Serializer):
+    session_id = serializers.UUIDField()
+    session_type = serializers.CharField()
+    session_status = serializers.CharField()
+    start_time = serializers.DateTimeField()
+    end_time = serializers.DateTimeField(allow_null=True)
+    total_price = serializers.DecimalField(max_digits=12, decimal_places=2)
+    student_count = serializers.IntegerField()

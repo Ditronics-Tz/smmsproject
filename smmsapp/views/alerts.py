@@ -1,13 +1,20 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from ..permissions.roles import IsAdminOrParent
 from ..serializers.alerts import BalanceThresholdSerializer
+from ..serializers.system import CodeMessageSerializer
 from ..services.audit import log_action, snapshot
 from ..services.alerts import _effective_threshold
 
 
+@extend_schema(
+    tags=['alerts'],
+    request=BalanceThresholdSerializer,
+    responses={200: BalanceThresholdSerializer, 403: CodeMessageSerializer},
+)
 class BalanceThresholdView(APIView):
     """Parent can view and update their low-balance alert threshold.
 

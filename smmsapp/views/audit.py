@@ -29,3 +29,10 @@ class AuditLogListView(generics.ListAPIView):
         if object_id:
             qs = qs.filter(object_id=object_id)
         return qs
+
+
+# Trailing-slash alias kept for backwards compatibility; the canonical path is
+# '/audit/logs' and is the only one documented in the schema.
+@extend_schema(exclude=True)
+class AuditLogListViewSlashAlias(AuditLogListView):
+    pass

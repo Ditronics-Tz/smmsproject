@@ -7,8 +7,10 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import status as http_status
 import time
 
+from ..serializers.system import HealthSerializer, StatusSerializer
 
-@extend_schema(tags=['health'], auth=[])
+
+@extend_schema(tags=['health'], auth=[], responses=HealthSerializer)
 class HealthView(APIView):
     """Liveness probe - never touches DB/Redis. For LB / Docker HEALTHCHECK."""
     permission_classes = [AllowAny]
@@ -18,7 +20,7 @@ class HealthView(APIView):
         return Response({"status": "ok"}, status=http_status.HTTP_200_OK)
 
 
-@extend_schema(tags=['health'])
+@extend_schema(tags=['health'], responses={200: StatusSerializer, 503: StatusSerializer})
 class StatusView(APIView):
     """Dependency checks - staff only. Do NOT use for LB probe."""
     permission_classes = [IsAdminUser]
@@ -53,3 +55,17 @@ class StatusView(APIView):
 
         http_code = http_status.HTTP_200_OK if overall_ok else http_status.HTTP_503_SERVICE_UNAVAILABLE
         return Response({"status": "ok" if overall_ok else "degraded", "checks": checks}, status=http_code)
+
+
+# Trailing-slash aliases exist only for backwards compatibility with clients
+# that were written before the canonical (slash-less) paths were settled. They
+# behave identically but are excluded from the schema so each operation is
+# documented exactly once, under one canonical path.
+@extend_schema(exclude=True)
+class HealthViewSlashAlias(HealthView):
+    pass
+
+
+@extend_schema(exclude=True)
+class StatusViewSlashAlias(StatusView):
+    pass

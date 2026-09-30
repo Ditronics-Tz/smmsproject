@@ -99,14 +99,14 @@ class TransactionExportTests(ExportBase):
         # Only student A's transaction present, not student B's.
         data_rows = [r for r in reader[1:] if r]
         self.assertEqual(len(data_rows), 1)
-        self.assertIn(self.txn_a.id.hex, data_rows[0][0])
+        self.assertIn(str(self.txn_a.id), data_rows[0][0])
 
     def test_school_admin_export_scoped(self):
         response = self._client(self.admin_a).post("/exports/transactions", {"export_format": "csv"})
         content = response.content.decode("utf-8-sig")
         data_rows = [r for r in list(csv.reader(StringIO(content)))[1:] if r]
         self.assertEqual(len(data_rows), 1)
-        self.assertIn(self.txn_a.id.hex, data_rows[0][0])
+        self.assertIn(str(self.txn_a.id), data_rows[0][0])
 
 
 class StudentExportTests(ExportBase):

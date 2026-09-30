@@ -199,6 +199,32 @@ class CanteenItem(models.Model):
     def __str__(self):
         return self.name
 
+# ----- SCAN SESSION TABLE ------
+class ScanSession(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    SESSION_TYPE_CHOICES = [
+        ('breakfast', 'Breakfast'),
+        ('lunch', 'Lunch'),
+        ('dinner','Dinner')
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operator = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'operator'})
+    type = models.CharField(max_length=50, choices=SESSION_TYPE_CHOICES, default='breakfast')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    start_at = models.DateTimeField(auto_now_add=True)
+    end_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Session {self.type} - {self.status}"
+
+
 # ------ TRANSACTIONS TABLE ------
 class Transaction(models.Model):
     STATUS_CHOICES = [
@@ -252,31 +278,6 @@ class Notification(models.Model):
     def __str__(self):
         return f"Notification for {self.recipient.first_name}: {self.type} - {self.status}"
 
-
-# ----- SCAN SESSION TABLE ------
-class ScanSession(models.Model):
-    STATUS_CHOICES = [
-        ('active', 'Active'),
-        ('completed', 'Completed'),
-        ('cancelled', 'Cancelled'),
-    ]
-
-    SESSION_TYPE_CHOICES = [
-        ('breakfast', 'Breakfast'),
-        ('lunch', 'Lunch'),
-        ('dinner','Dinner')
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    operator = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'operator'})
-    type = models.CharField(max_length=50, choices=SESSION_TYPE_CHOICES, default='breakfast')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
-    start_at = models.DateTimeField(auto_now_add=True)
-    end_at = models.DateTimeField(null=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"Session {self.type} - {self.status}"
 
 # ---- SCANNED DATA TABLE -----
 class ScannedData(models.Model):

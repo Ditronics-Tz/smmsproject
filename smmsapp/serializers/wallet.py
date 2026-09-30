@@ -7,10 +7,12 @@ from ..models import (
 
 
 class BankDepositSerializer(serializers.ModelSerializer):
+    # BankDeposit's FK to RFIDCard is named `control_number` (to_field on
+    # RFIDCard.control_number), so the card is reached through that attribute.
     student_name = serializers.CharField(
-        source='rfid_card.student_or_staff.first_name', read_only=True
+        source='control_number.student_or_staff.first_name', read_only=True
     )
-    card_number = serializers.CharField(source='rfid_card.card_number', read_only=True)
+    card_number = serializers.CharField(source='control_number.card_number', read_only=True)
     submitted_by_name = serializers.CharField(
         source='submitted_by.get_full_name', read_only=True, allow_null=True
     )
@@ -18,7 +20,7 @@ class BankDepositSerializer(serializers.ModelSerializer):
     class Meta:
         model = BankDeposit
         fields = [
-            'id', 'control_number', 'card_number', 'amount',
+            'id', 'control_number', 'card_number', 'student_name', 'amount',
             'status', 'processed_at', 'submitted_by', 'submitted_by_name',
             'created_at',
         ]
@@ -31,6 +33,11 @@ class ProcessDepositSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)
 
 
+class CreateDepositSerializer(serializers.Serializer):
+    card_number = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
 class LedgerEntrySerializer(serializers.ModelSerializer):
     card_number = serializers.CharField(source='rfid_card.card_number', read_only=True)
     event_type_display = serializers.CharField(source='get_event_type_display', read_only=True)
@@ -41,7 +48,7 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'card_number', 'event_type', 'event_type_display',
             'amount', 'balance_before', 'balance_after',
-            'ref_transaction', 'ref_deposit', 'timestamp',
+            'ref_transaction', 'ref_deposit', 'rfid_card_id', 'timestamp',
         ]
         read_only_fields = ['id', 'timestamp']
 
@@ -76,8 +83,11 @@ class CardLedgerViewSerializer(serializers.Serializer):
     """Output for a single ledger entry with running balance reconstruction."""
     timestamp = serializers.DateTimeField()
     event_type = serializers.CharField()
-    event_type_display = serializers.CharField()
+    event_type_display = serializers.CharField(source='get_event_type_display')
     amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     balance_before = serializers.DecimalField(max_digits=10, decimal_places=2)
     balance_after = serializers.DecimalField(max_digits=10, decimal_places=2)
-    description = serializers.CharField(help_text='Human-readable description')
+    description = serializers.SerializerMethodField()
+
+    def get_description(self, obj) -> str:
+        return str(obj)

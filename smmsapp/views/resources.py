@@ -12,10 +12,12 @@ from django.shortcuts import get_object_or_404
 from ..services.audit import log_action, snapshot
 from drf_spectacular.utils import extend_schema
 from ..serializers import *
+from ..serializers.system import CodeMessageSerializer
 from ..models import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly
 
 # ----- API FOR GET SCHOOL -----
+@extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=SchoolSerializer(many=True))
 class SchoolListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminOnly]
     page_size = 50
@@ -48,6 +50,7 @@ class CreateSchoolView(generics.CreateAPIView):
 
 
 # ---- API FOR DELETE SCHOOL -----
+@extend_schema(tags=['resources'], request=SchoolIdRequestSerializer, responses=CodeMessageSerializer)
 class DeleteSchoolView(APIView):
     permission_classes = [IsAdminUser]
     def post(self, request, *args, **kwargs):
@@ -101,6 +104,7 @@ class DeleteSchoolView(APIView):
 
 
 # ----- API FOR GET USER LIST -----
+@extend_schema(tags=['resources'], request=UserListRequestSerializer, responses=UserSerializer(many=True))
 class UserListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminOnly]  #Requires authentication
     page_size = 50 
@@ -127,6 +131,7 @@ class UserListView(APIView, PageNumberPagination):
 
 
 # ----- API FOR GET USER LIST -----
+@extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=UserSerializer(many=True))
 class InactiveUserListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminOnly]  #Requires authentication
     page_size = 50 
@@ -152,6 +157,7 @@ class InactiveUserListView(APIView, PageNumberPagination):
   
 
 # ----- API FOR FETCH STUDENT DATA -----
+@extend_schema(tags=['resources'], request=StudentIdRequestSerializer, responses={200: FullStudentSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class StudentDetailView(APIView):
     permission_classes = [IsAdminOrParent]
 
@@ -176,6 +182,7 @@ class StudentDetailView(APIView):
 
 
 # ----- API FOR FETCH PARENT DATA -----
+@extend_schema(tags=['resources'], request=ParentIdRequestSerializer, responses={200: FullParentSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class ParentDetailView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -204,6 +211,7 @@ class ParentDetailView(APIView):
     
 
 # ----- API FOR FETCH STAFF DATA -----
+@extend_schema(tags=['resources'], request=StaffIdRequestSerializer, responses={200: FullStaffSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class StaffDetailView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -232,6 +240,7 @@ class StaffDetailView(APIView):
 
 
 # ----- API FOR FETCH OPERATORS DATA -----
+@extend_schema(tags=['resources'], request=OperatorIdRequestSerializer, responses={200: FullOperatorSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class OperatorDetailView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -284,6 +293,7 @@ class AdminDetailsView(generics.RetrieveAPIView):
 
 
 # ----- API FOR FETCH ITEM LIST -----
+@extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=CanteenItemSerializer(many=True))
 class ItemListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminOnly]
     page_size = 50
@@ -309,6 +319,7 @@ class ItemListView(APIView, PageNumberPagination):
 
 
 # ---- API FOR DELETE ITEM -----
+@extend_schema(tags=['resources'], request=ItemIdRequestSerializer, responses=CodeMessageSerializer)
 class DeleteItemView(APIView):
     permission_classes = [IsAdminOnly]
     def post(self, request, *args, **kwargs):
@@ -521,6 +532,7 @@ class EditCardView(generics.UpdateAPIView):
 
 
 # ---- API FOR DELETE CARD -----
+@extend_schema(tags=['resources'], request=CardIdRequestSerializer, responses=CodeMessageSerializer)
 class DeleteCardView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -590,6 +602,7 @@ class DeleteCardView(APIView):
 
 
 # ---- API FOR GET CARD LIST
+@extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=RFIDCardSerializer(many=True))
 class CardListView(APIView, PageNumberPagination):
     permission_classes = [IsAdminUser]
     page_size = 50
@@ -615,6 +628,7 @@ class CardListView(APIView, PageNumberPagination):
 
 
 # ----- API FOR FETCH CARD DETAILS ----- 
+@extend_schema(tags=['resources'], request=CardIdRequestSerializer, responses={200: RFIDCardSerializer, 400: CodeMessageSerializer, 404: CodeMessageSerializer})
 class CardDetailsView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -637,6 +651,7 @@ class CardDetailsView(APIView):
     
 
 # API FOR ACTIVATE AND DEACTIVATE CARD
+@extend_schema(tags=['resources'], request=CardActivateDeactivateSerializer, responses=CodeMessageSerializer)
 class ActivateDeactivateCardView(APIView):
     permission_classes = [IsAdminOnly]
 
@@ -832,6 +847,7 @@ class ReplaceCardView(APIView):
 
 
 # ---- API FOR NOTIFICATIONS -----
+@extend_schema(tags=['resources'], request=None, responses=NotificationSerializer(many=True))
 class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -842,6 +858,7 @@ class NotificationListView(APIView):
     
 
 # ---- API FOR RETURN ALL NOTIFICATIONS -----
+@extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=NotificationSerializer(many=True))
 class AllNotificationsView(APIView, PageNumberPagination):
     permission_classes = [IsAdminUser]
     page_size = 50
