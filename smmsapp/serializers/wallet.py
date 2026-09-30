@@ -7,10 +7,12 @@ from ..models import (
 
 
 class BankDepositSerializer(serializers.ModelSerializer):
+    # BankDeposit's FK to RFIDCard is named `control_number` (to_field on
+    # RFIDCard.control_number), so the card is reached through that attribute.
     student_name = serializers.CharField(
-        source='rfid_card.student_or_staff.first_name', read_only=True
+        source='control_number.student_or_staff.first_name', read_only=True
     )
-    card_number = serializers.CharField(source='rfid_card.card_number', read_only=True)
+    card_number = serializers.CharField(source='control_number.card_number', read_only=True)
     submitted_by_name = serializers.CharField(
         source='submitted_by.get_full_name', read_only=True, allow_null=True
     )
@@ -76,8 +78,11 @@ class CardLedgerViewSerializer(serializers.Serializer):
     """Output for a single ledger entry with running balance reconstruction."""
     timestamp = serializers.DateTimeField()
     event_type = serializers.CharField()
-    event_type_display = serializers.CharField()
+    event_type_display = serializers.CharField(source='get_event_type_display')
     amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     balance_before = serializers.DecimalField(max_digits=10, decimal_places=2)
     balance_after = serializers.DecimalField(max_digits=10, decimal_places=2)
-    description = serializers.CharField(help_text='Human-readable description')
+    description = serializers.SerializerMethodField()
+
+    def get_description(self, obj):
+        return str(obj)
