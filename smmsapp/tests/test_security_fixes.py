@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -34,6 +35,9 @@ class PasswordNotificationSecurityTests(TestCase):
 
     def setUp(self):
         super().setUp()
+        # DRF throttling state lives in the default cache, which is NOT rolled
+        # back between tests. Reset it so scoped rates don't leak across cases.
+        cache.clear()
         self.api = APIClient()
 
     def test_forget_password_sends_token_link_not_plaintext(self):

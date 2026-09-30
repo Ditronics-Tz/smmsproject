@@ -13,7 +13,6 @@ from ..models import (
     RFIDCard, BankDeposit, Transaction, LedgerEntry,
     ScanSession, Reconciliation, Reversal, CustomUser,
 )
-from ..models.sessions import ScanSession as ScanSessionModel
 from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminOrParent
 from ..services.audit import log_action, snapshot
 from ..serializers.wallet import (

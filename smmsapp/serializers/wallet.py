@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.pagination import PageNumberPagination
 from ..models import (
     RFIDCard, BankDeposit, Transaction, LedgerEntry,
     ScanSession, Reconciliation, Reversal, CustomUser,
@@ -17,7 +18,7 @@ class BankDepositSerializer(serializers.ModelSerializer):
     class Meta:
         model = BankDeposit
         fields = [
-            'id', 'control_number', 'card_number', 'amount',
+            'id', 'control_number', 'card_number', 'student_name', 'amount',
             'status', 'processed_at', 'submitted_by', 'submitted_by_name',
             'created_at',
         ]
@@ -40,7 +41,7 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'card_number', 'event_type', 'event_type_display',
             'amount', 'balance_before', 'balance_after',
-            'ref_transaction', 'ref_deposit', 'timestamp',
+            'ref_transaction', 'ref_deposit', 'rfid_card_id', 'timestamp',
         ]
         read_only_fields = ['id', 'timestamp']
 
@@ -65,7 +66,7 @@ class ReversalSerializer(serializers.Serializer):
     reversed_by_id = serializers.UUIDField(required=False, allow_null=True)
 
 
-class CardLedgerPagination(serializers.PageNumberPagination):
+class CardLedgerPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = 'page_size'
     max_page_size = 200

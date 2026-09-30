@@ -1,8 +1,6 @@
 from django.urls import path
 from ..views import wallet as wallet_views
 
-app_name = 'wallet'
-
 urlpatterns = [
     # ------- Deposit (top-up) flow -------
     path('deposit/create', wallet_views.CreateDepositView.as_view(), name='create-deposit'),
