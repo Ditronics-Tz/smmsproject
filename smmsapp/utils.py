@@ -2,8 +2,18 @@ from django.utils.timezone import now
 from io import BytesIO
 from django.db.models import Sum, Q
 from .models import Transaction, RFIDCard, ParentStudent
-from weasyprint import HTML
 from django.template.loader import render_to_string
+
+
+def _html_to_pdf(html_string):
+    """Render HTML string to PDF bytes.
+
+    WeasyPrint is imported lazily so the app can boot on machines without
+    its native system libraries (Pango/Cairo); only PDF generation fails
+    there, everything else works.
+    """
+    from weasyprint import HTML
+    return HTML(string=html_string).write_pdf()
 
 
 def get_admin_scope(user):
@@ -45,7 +55,7 @@ def generate_end_of_day_report(school=None):
         "transactions": transactions,
     })
 
-    pdf = HTML(string=html_string).write_pdf()
+    pdf = _html_to_pdf(html_string)
     buffer.write(pdf)
     buffer.seek(0)
 
@@ -95,7 +105,7 @@ def generate_parent_end_of_day_report(request):
     })
 
     # Convert HTML to PDF
-    pdf = HTML(string=html_string).write_pdf()
+    pdf = _html_to_pdf(html_string)
     buffer.write(pdf)
     buffer.seek(0)  # Move buffer cursor to the start
     

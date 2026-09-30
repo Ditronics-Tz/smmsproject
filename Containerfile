@@ -1,6 +1,9 @@
 # ============================================================================
-# Multi-Stage Dockerfile for Django SMMS Project
+# Multi-Stage Containerfile for Django SMMS Project (Podman)
 # Optimized for minimal image size (<200MB), security, and production use
+# Build with: podman build -f Containerfile -t smms-api:prod --target runtime .
+# Same pinned, multi-stage recipe as Dockerfile (python:3.12-slim-bookworm,
+# uv-installed venv, runtime runs as non-root django:1000). OCI image.
 # ============================================================================
 
 # ============================================================================
@@ -82,8 +85,11 @@ COPY --chown=django:django . /app/
 COPY --chown=django:django entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Create directories for static and media files
+# Create directories for static and media files.
+# Also chown /app itself: WORKDIR created it as root, and entrypoint.sh must
+# create its setup-flag file directly under /app at runtime (Podman fix).
 RUN mkdir -p /app/static /app/uploads && \
+    chown django:django /app && \
     chown -R django:django /app/static /app/uploads
 
 # Switch to non-root user

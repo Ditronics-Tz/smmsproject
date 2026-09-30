@@ -1,20 +1,25 @@
 # ============================================================================
-# Docker Compose Configuration for Development
+# Podman Compose for SMMS Backend (Django + PostgreSQL + Redis + Celery)
+# API -> http://localhost:8000 (container :8000)
+# Usage (from Fedora WSL, in this directory):
+#   podman compose build
+#   podman compose up -d
+#   podman compose ps
+#   podman compose logs -f
+#   podman compose down
+# Requires: podman >= 4, podman-compose or podman compose plugin, .env file
+# (copy .env.example -> .env and set SECRET_KEY + DB_PASSWORD at minimum).
+# Migrations run automatically via entrypoint.sh on `web` startup; workers
+# wait for web setup. Never run destructive DB commands automatically.
+# Manual migration: podman compose exec web python manage.py migrate --noinput
+# Production overlay: podman compose -f compose.yaml -f compose.prod.yaml up -d
+#   (see docker-compose.prod.yml for the gunicorn override reference).
 # ============================================================================
-# This configuration provides:
-# - Hot-reload for code changes (volume mount)
-# - PostgreSQL database
-# - Redis for Celery
-# - Port binding to localhost only (127.0.0.1:8000)
-# ============================================================================
-
-version: '3.8'
 
 services:
-  # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    container_name: smms_db_dev
+    container_name: smms_db
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -23,7 +28,7 @@ services:
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     ports:
-      # Host port 5439 avoids conflicting with the host-native PostgreSQL on 5432
+      # Host 5439 avoids clashing with a host-native PostgreSQL on 5432
       - "127.0.0.1:5439:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
@@ -31,43 +36,39 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - smms_network
+      - smmsapi_network
 
-  # Redis for Celery
   redis:
     image: redis:7-alpine
-    container_name: smms_redis_dev
+    container_name: smms_redis
     restart: unless-stopped
-    ports:
-      # Host port 6380 avoids conflicting with the host-native Redis on 6379
-      - "127.0.0.1:6380:6379"
     volumes:
       - redis_data:/data
+    ports:
+      # Host 6381 avoids host-native Redis (6379); 6380 was unusable in this
+      # WSL2 instance (stale wslrelay mirror holds it). Container stays 6379.
+      - "127.0.0.1:6381:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - smms_network
+      - smmsapi_network
 
-  # Django Web Application
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Containerfile
       target: runtime
-    container_name: smms_web_dev
+    image: smms-api:dev
+    container_name: smms_web
     restart: unless-stopped
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
-      # Mount entire project for hot-reload in development
-      - .:/app
-      # Preserve node_modules and venv if they exist
-      - /app/venv
-      - /app/.venv
+      - static_assets:/app/static
+      - media_files:/app/uploads
     ports:
-      # Bind to localhost only for security
       - "127.0.0.1:8000:8000"
     environment:
       - DEBUG=${DEBUG:-False}
@@ -81,31 +82,37 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - DJANGO_SETTINGS_MODULE=smmsproject.settings
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - SETUP_WAIT_TIMEOUT=12
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
       - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-False}
       - SECURE_HSTS_SECONDS=${SECURE_HSTS_SECONDS:-}
+      - API_BASE_URL=${API_BASE_URL:-http://127.0.0.1:8000}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - smms_network
-    stdin_open: true
-    tty: true
+      - smmsapi_network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Celery Worker
   celery:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Containerfile
       target: runtime
-    container_name: smms_celery_dev
+    image: smms-api:dev
+    container_name: smms_celery
     restart: unless-stopped
     command: celery -A smmsproject worker --loglevel=info
     volumes:
-      - .:/app
+      - media_files:/app/uploads
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY}
@@ -118,28 +125,23 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - DJANGO_SETTINGS_MODULE=smmsproject.settings
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
-      - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-False}
-      - SECURE_HSTS_SECONDS=${SECURE_HSTS_SECONDS:-}
+      - SETUP_WAIT_TIMEOUT=12
     depends_on:
       - db
       - redis
       - web
     networks:
-      - smms_network
+      - smmsapi_network
 
-  # Celery Beat (Scheduler)
   celery-beat:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Containerfile
       target: runtime
-    container_name: smms_celery_beat_dev
+    image: smms-api:dev
+    container_name: smms_celery_beat
     restart: unless-stopped
     command: celery -A smmsproject beat --loglevel=info
-    volumes:
-      - .:/app
     environment:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY}
@@ -152,21 +154,20 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - DJANGO_SETTINGS_MODULE=smmsproject.settings
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
-      - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-False}
-      - SECURE_HSTS_SECONDS=${SECURE_HSTS_SECONDS:-}
+      - SETUP_WAIT_TIMEOUT=12
     depends_on:
       - db
       - redis
       - web
     networks:
-      - smms_network
+      - smmsapi_network
 
 networks:
-  smms_network:
+  smmsapi_network:
     driver: bridge
 
 volumes:
   postgres_data:
   redis_data:
+  static_assets:
+  media_files:
