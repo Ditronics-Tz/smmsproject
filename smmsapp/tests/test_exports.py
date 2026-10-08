@@ -60,11 +60,11 @@ class ExportBase(TestCase):
 
         cls.txn_a = Transaction.objects.create(
             student_or_staff=cls.student_a, rfid_card=cls.card_a, item=cls.item,
-            amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
+            amount=Decimal("1500.00"), charged_amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
         )
         cls.txn_b = Transaction.objects.create(
             student_or_staff=cls.student_b, rfid_card=cls.card_b, item=cls.item,
-            amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
+            amount=Decimal("1500.00"), charged_amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
         )
 
         ParentStudent.objects.create(parent=cls.parent, student=cls.student_a)

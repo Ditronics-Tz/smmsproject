@@ -16,6 +16,7 @@ Covers the audit findings:
    effects. Fixed to refuse deletion while dependencies/history exist.
 """
 import threading
+from unittest import skipUnless
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -171,6 +172,7 @@ class ScanRFIDCardConcurrencyTests(IntegrityBase):
         # re-derived from the already-clamped balance.
         penalty_tx = Transaction.objects.get(rfid_card=self.card, item=expensive)
         self.assertEqual(penalty_tx.amount, Decimal("5500.00"))
+        self.assertEqual(penalty_tx.charged_amount, Decimal("600.00"))
         self.assertEqual(penalty_tx.transaction_status, "penalty")
 
     def test_exact_balance_purchase_logs_correct_amount(self):
@@ -342,6 +344,7 @@ class DeleteGuardTests(IntegrityBase):
         self.assertFalse(RFIDCard.objects.filter(id=fresh.id).exists())
 
 
+@skipUnless(connections['default'].vendor == 'postgresql', 'select_for_update concurrency requires PostgreSQL')
 class ScanConcurrencySerializationTests(TransactionTestCase):
     """True-concurrency regression for the row-lock fix (PostgreSQL backend).
 

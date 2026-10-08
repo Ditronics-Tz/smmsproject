@@ -106,9 +106,9 @@ class SalesSummaryView(APIView):
         total_success = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter).count()
         total_penalts = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').filter(txn_filter).count()
         total_success_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter) \
-                                         .aggregate(total_amount=Sum('amount'))['total_amount'] or 0
+                                         .aggregate(total_amount=Sum('charged_amount'))['total_amount'] or 0
         total_penalt_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').filter(txn_filter) \
-                                         .aggregate(total_amount=Sum('amount'))['total_amount'] or 0
+                                         .aggregate(total_amount=Sum('charged_amount'))['total_amount'] or 0
 
         data = {
             "total_success": total_success,
@@ -138,7 +138,7 @@ class WeeklySalesTrendView(APIView):
 
         sales_data = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter) \
                                         .values('transaction_date__date') \
-                                        .annotate(sales_amount=Sum('amount')) \
+                                        .annotate(sales_amount=Sum('charged_amount')) \
                                         .order_by('transaction_date__date')
 
         formatted_sales_data = [
@@ -233,6 +233,7 @@ class OperatorScanAnalyticsView(APIView):
     """Per-operator scan counts and NFC share for analytics consumers."""
     permission_classes = [IsAdminOnly, FeatureEnabled('ANALYTICS')]
 
+    @extend_schema(tags=['analytics'], responses=OperatorScanAnalyticsSerializer)
     def get(self, request):
         from django.db.models import Count, Q
         operators = CustomUser.objects.filter(role='operator').order_by('last_name', 'first_name')
@@ -322,16 +323,16 @@ class ChildSpendView(APIView):
         for student in child_list:
             student_txns = transactions.filter(student_or_staff=student)
             aggregated = student_txns.aggregate(
-                total_spend=Sum('amount'),
+                total_spend=Sum('charged_amount'),
                 txn_count=Count('id'),
             )
             penalty_amount = student_txns.filter(transaction_status='penalty').aggregate(
-                total=Sum('amount')
+                total=Sum('charged_amount')
             )['total'] or 0
 
             items = student_txns.values('item_id').annotate(
                 quantity=Count('id'),
-                amount=Sum('amount'),
+                amount=Sum('charged_amount'),
             ).order_by('item_id')
 
             item_breakdown = []

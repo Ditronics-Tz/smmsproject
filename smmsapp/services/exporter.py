@@ -126,7 +126,7 @@ def _transaction_rows(qs):
             f"{t.student_or_staff.first_name} {t.student_or_staff.last_name}".strip(),
             t.rfid_card.card_number,
             t.item.name if t.item else '',
-            t.amount,
+            t.charged_amount,
             t.transaction_status,
             t.transaction_date.isoformat() if t.transaction_date else '',
             'Voided' if t.is_voided else '',
@@ -166,7 +166,7 @@ def _deposit_rows(qs):
 
 
 TRANSACTION_HEADERS = [
-    'Transaction ID', 'Username', 'Name', 'Card Number', 'Item', 'Amount',
+    'Transaction ID', 'Username', 'Name', 'Card Number', 'Item', 'Charged Amount',
     'Status', 'Transaction Date', 'Voided',
 ]
 STUDENT_HEADERS = [

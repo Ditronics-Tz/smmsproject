@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.conf import settings
 
 from ..models import (
     RFIDCard, BankDeposit, Transaction, LedgerEntry,
@@ -170,11 +171,19 @@ class ProcessDepositView(APIView):
         if action == 'process':
             # Credit the card balance atomically with row lock
             with transaction.atomic():
+                deposit = BankDeposit.objects.select_for_update().get(pk=deposit.pk)
+                if deposit.status != 'pending':
+                    return Response({
+                        'code': 409,
+                        'message': f'Deposit already {deposit.status}; no action taken',
+                    }, status=status.HTTP_409_CONFLICT)
                 rfid_card = RFIDCard.objects.select_for_update().get(
                     control_number=deposit.control_number
                 )
                 old_balance = rfid_card.balance
                 rfid_card.balance += deposit.amount
+                if settings.STRIKE_RESET_ON_DEPOSIT:
+                    rfid_card.insufficient_meal_count = 0
                 rfid_card.save()
 
                 # Write ledger entry for the deposit
@@ -186,10 +195,12 @@ class ProcessDepositView(APIView):
                     balance_after=rfid_card.balance,
                     ref_deposit=deposit,
                 )
+                from ..services.ledger import post_deposit
+                post_deposit(deposit, actor=request.user)
+                deposit.status = 'processed'
+                deposit.processed_at = timezone.now()
+                deposit.save(update_fields=['status', 'processed_at'])
 
-            deposit.status = 'processed'
-            deposit.processed_at = timezone.now()
-            deposit.save()
             try:
                 log_action('approve', obj=deposit, after=snapshot(deposit))
             except Exception:
@@ -284,17 +295,17 @@ class ReverseTransactionView(APIView):
         reason = serializer.validated_data['reason']
         reversed_by_id = serializer.validated_data.get('reversed_by_id')
 
-        transaction = get_object_or_404(Transaction, id=transaction_id)
+        txn = get_object_or_404(Transaction, id=transaction_id)
 
         # Idempotency guard 1: already voided?
-        if transaction.is_voided:
+        if txn.is_voided:
             return Response({
                 'code': 409,
                 'message': 'This transaction has already been voided',
             }, status=status.HTTP_409_CONFLICT)
 
         # Idempotency guard 2: already has a Reversal row?
-        if Reversal.objects.filter(transaction=transaction).exists():
+        if Reversal.objects.filter(transaction=txn).exists():
             return Response({
                 'code': 409,
                 'message': 'A reversal record already exists for this transaction',
@@ -303,43 +314,70 @@ class ReverseTransactionView(APIView):
         with transaction.atomic():
             # Lock the card row so concurrent deposits/scans can't interfere
             rfid_card = RFIDCard.objects.select_for_update().get(
-                control_number=transaction.rfid_card.control_number
+                control_number=txn.rfid_card.control_number
             )
 
             old_balance = rfid_card.balance
             # Restore the exact amount that was deducted (includes penalty if applicable)
-            rfid_card.balance += transaction.amount
+            restore_amount = txn.preorder_item.unit_price if txn.preorder_item_id else txn.charged_amount
+            rfid_card.balance += restore_amount
+            if txn.transaction_status == 'penalty':
+                rfid_card.insufficient_meal_count = max(0, rfid_card.insufficient_meal_count - 1)
             rfid_card.save()
 
             # Write ledger entry for the reversal
             LedgerEntry.objects.create(
                 rfid_card=rfid_card,
                 event_type='reversal',
-                amount=transaction.amount,  # positive: restores the deduction
+                amount=restore_amount,  # positive: restores the actual deduction
                 balance_before=old_balance,
                 balance_after=rfid_card.balance,
-                ref_transaction=transaction,
+                ref_transaction=txn,
             )
 
             # Mark the transaction as voided
-            transaction.is_voided = True
-            transaction.save()
+            txn.is_voided = True
+            txn.save()
 
             # Create the Reversal record (unique constraint => cannot be applied twice)
             try:
-                log_action('reverse', obj=transaction, after=snapshot(transaction))
+                log_action('reverse', obj=txn, after=snapshot(txn))
             except Exception:
                 pass
             Reversal.objects.create(
-                transaction=transaction,
+                transaction=txn,
                 reversed_by_id=reversed_by_id,
                 reason=reason,
             )
+            reversal = Reversal.objects.get(transaction=txn)
+            if txn.preorder_item_id:
+                preorder = txn.preorder_item.preorder
+                from ..services.preorders import release_preorder
+                if preorder.status == 'placed':
+                    release_preorder(preorder, actor=request.user)
+                preorder.status = 'cancelled'
+                preorder.cancelled_at = timezone.now()
+                preorder.note = 'Cancelled after reversal of a fulfilled pre-order transaction.'
+                preorder.save(update_fields=['status', 'cancelled_at', 'note'])
+            original_journal = txn.journal_entries.first()
+            if original_journal:
+                from ..services.ledger import post_reversal
+                post_reversal(original_journal, reversal, actor=request.user)
+            elif restore_amount > 0:
+                # Transactions created before double-entry journal rollout do
+                # not have a source entry to mirror; preserve balanced accounts
+                # using the stored actual charge rather than the assessed price.
+                from ..services.ledger import post_entry
+                income_account = '4100' if txn.transaction_status == 'penalty' else '4000'
+                post_entry('reversal', [
+                    {'account': '2000', 'rfid_card': rfid_card, 'direction': 'credit', 'amount': restore_amount},
+                    {'account': income_account, 'direction': 'debit', 'amount': restore_amount},
+                ], f'reversal:{txn.id}', refs={'ref_reversal': reversal}, actor=request.user, memo=reason)
 
             # Notify the relevant parties
             from ..models import Notification, CustomUser
             # Notify the card's student/Staff parent
-            student_or_staff = transaction.student_or_staff
+            student_or_staff = txn.student_or_staff
             # Find parents of this student
             from ..models import ParentStudent
             parents = ParentStudent.objects.filter(student=student_or_staff)
@@ -347,7 +385,7 @@ class ReverseTransactionView(APIView):
                 Notification.objects.create(
                     title='Transaction Voided',
                     recipient=parent_entry.parent,
-                    message=f'Transaction for {student_or_staff.username} ({transaction.item.name}) has been voided. '
+                    message=f'Transaction for {student_or_staff.username} ({txn.item.name}) has been voided. '
                             f'Balance restored to {rfid_card.balance}.',
                     type='transaction',
                     status='sent',
@@ -357,9 +395,9 @@ class ReverseTransactionView(APIView):
                 'code': 200,
                 'message': 'Transaction reversed successfully, balance restored',
                 'transaction': {
-                    'id': str(transaction.id),
-                    'item': transaction.item.name,
-                    'amount': str(transaction.amount),
+                    'id': str(txn.id),
+                    'item': txn.item.name,
+                    'amount': str(restore_amount),
                     'new_balance': str(rfid_card.balance),
                 },
                 'ledger': LedgerEntrySerializer(

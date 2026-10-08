@@ -11,8 +11,13 @@ def FeatureEnabled(key):
         def has_permission(self, request, view):
             # The existing scanner is RFID-first. Only requests explicitly
             # using the optional NFC UID flow require NFC_SCAN.
-            if key == 'NFC_SCAN' and 'card_uid' not in getattr(request, 'data', {}):
-                return True
+            if key == 'NFC_SCAN':
+                try:
+                    request_data = request.data
+                except Exception:
+                    request_data = getattr(getattr(request, '_request', None), 'POST', {})
+                if 'card_uid' not in request_data:
+                    return True
             if is_enabled(key):
                 return True
             self.message = {

@@ -40,7 +40,8 @@ class SessionContractTests(TestCase):
         for item, amount, tx_status, voided in records:
             Transaction.objects.create(
                 student_or_staff=self.student, rfid_card=self.card, item=item,
-                amount=amount, transaction_status=tx_status, session=self.session,
+                amount=amount, charged_amount=(amount if not voided else Decimal('0.00')),
+                transaction_status=tx_status, session=self.session,
                 is_voided=voided,
             )
             ScannedData.objects.create(

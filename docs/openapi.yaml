@@ -4,6 +4,21 @@ info:
   version: 1.0.0
   description: Student Meal Management System API
 paths:
+  /api/v1/analytics/operators:
+    get:
+      operationId: api_v1_analytics_operators_retrieve
+      description: Per-operator scan counts and NFC share for analytics consumers.
+      tags:
+      - analytics
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorScanAnalytics'
+          description: ''
   /api/v1/audit/logs:
     get:
       operationId: api_v1_audit_logs_list
@@ -405,6 +420,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/config/features:
+    get:
+      operationId: api_v1_config_features_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/config/features/{key}:
+    put:
+      operationId: api_v1_config_features_update
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeatureFlagUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FeatureFlagUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FeatureFlagUpdateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlag'
+          description: ''
+  /api/v1/config/public:
+    get:
+      operationId: api_v1_config_public_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
           description: ''
   /api/v1/dashboard/balance-threshold:
     get:
@@ -877,6 +955,117 @@ paths:
               schema:
                 $ref: '#/components/schemas/ImportUpload'
           description: ''
+  /api/v1/ledger/accounts/{code}/statement:
+    get:
+      operationId: api_v1_ledger_accounts_statement_list
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardStatementLine'
+          description: ''
+  /api/v1/ledger/cards/{card_id}/statement:
+    get:
+      operationId: api_v1_ledger_cards_statement_list
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardStatementLine'
+          description: ''
+  /api/v1/ledger/integrity:
+    get:
+      operationId: api_v1_ledger_integrity_retrieve
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/ledger/journal:
+    get:
+      operationId: api_v1_ledger_journal_list
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JournalEntry'
+          description: ''
+  /api/v1/ledger/journal/{entry_id}:
+    get:
+      operationId: api_v1_ledger_journal_retrieve
+      parameters:
+      - in: path
+        name: entry_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+          description: ''
+  /api/v1/ledger/trial-balance:
+    get:
+      operationId: api_v1_ledger_trial_balance_retrieve
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrialBalance'
+          description: ''
   /api/v1/list/canteen-items:
     get:
       operationId: api_v1_list_canteen_items_list
@@ -1002,6 +1191,275 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedStudentList'
+          description: ''
+  /api/v1/menu/copy:
+    post:
+      operationId: api_v1_menu_copy_create
+      tags:
+      - menu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuCopyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuCopyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuCopyRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyMenu'
+          description: ''
+  /api/v1/menu/daily:
+    get:
+      operationId: api_v1_menu_daily_list
+      tags:
+      - menu
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyMenu'
+          description: ''
+    post:
+      operationId: api_v1_menu_daily_create
+      tags:
+      - menu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyMenuWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyMenuWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyMenuWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMenu'
+          description: ''
+  /api/v1/menu/daily/{menu_id}:
+    get:
+      operationId: api_v1_menu_daily_retrieve
+      parameters:
+      - in: path
+        name: menu_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - menu
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMenu'
+          description: ''
+    put:
+      operationId: api_v1_menu_daily_update
+      parameters:
+      - in: path
+        name: menu_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - menu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyMenuWriteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyMenuWriteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyMenuWriteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMenu'
+          description: ''
+    delete:
+      operationId: api_v1_menu_daily_destroy
+      parameters:
+      - in: path
+        name: menu_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - menu
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/menu/today:
+    get:
+      operationId: api_v1_menu_today_retrieve
+      tags:
+      - menu
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMenu'
+          description: ''
+  /api/v1/preorders/cancel:
+    post:
+      operationId: api_v1_preorders_cancel_create
+      tags:
+      - preorders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreOrderCancelRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PreOrderCancelRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PreOrderCancelRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreOrder'
+          description: ''
+  /api/v1/preorders/create:
+    post:
+      operationId: api_v1_preorders_create_create
+      tags:
+      - preorders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreOrderCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PreOrderCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PreOrderCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreOrder'
+          description: ''
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreOrder'
+          description: ''
+  /api/v1/preorders/list:
+    get:
+      operationId: api_v1_preorders_list_retrieve
+      tags:
+      - preorders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreOrderListResponse'
+          description: ''
+  /api/v1/preorders/menu:
+    get:
+      operationId: api_v1_preorders_menu_retrieve
+      tags:
+      - preorders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreOrderMenuResponse'
+          description: ''
+  /api/v1/preorders/session:
+    get:
+      operationId: api_v1_preorders_session_list
+      tags:
+      - preorders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PreOrder'
+          description: ''
+  /api/v1/preorders/summary:
+    get:
+      operationId: api_v1_preorders_summary_retrieve
+      tags:
+      - preorders
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
           description: ''
   /api/v1/resources/activate-deactivate-card:
     post:
@@ -5006,6 +5464,49 @@ components:
       - event_type
       - event_type_display
       - timestamp
+    CardStatementLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entry_id:
+          type: string
+          format: uuid
+          readOnly: true
+        event_type:
+          type: string
+          readOnly: true
+        memo:
+          type: string
+          readOnly: true
+        account:
+          type: string
+          readOnly: true
+        direction:
+          $ref: '#/components/schemas/DirectionEnum'
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        balance_after:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - account
+      - amount
+      - created_at
+      - direction
+      - entry_id
+      - event_type
+      - id
+      - memo
     ChangePasswordRequestRequest:
       type: object
       properties:
@@ -5175,13 +5676,11 @@ components:
           readOnly: true
         card_number:
           type: string
-          maxLength: 50
         issued_date:
           type: string
           format: date-time
           nullable: true
       required:
-      - card_number
       - control_number
       - id
       - student_or_staff
@@ -5200,14 +5699,14 @@ components:
           type: boolean
         card_number:
           type: string
-          minLength: 1
-          maxLength: 50
+        card_uid:
+          type: string
+          writeOnly: true
         issued_date:
           type: string
           format: date-time
           nullable: true
       required:
-      - card_number
       - student_or_staff
     CreateUserResponse:
       type: object
@@ -5222,6 +5721,85 @@ components:
       required:
       - message
       - user
+    DailyMenu:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        date:
+          type: string
+          format: date
+        meal_type:
+          $ref: '#/components/schemas/SessionTypeEnum'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyMenuItem'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - date
+      - id
+      - items
+      - meal_type
+    DailyMenuItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        price:
+          type: number
+          format: double
+          readOnly: true
+        price_override:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+      required:
+      - item_id
+      - name
+      - price
+    DailyMenuItemInputRequest:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        price_override:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+      required:
+      - item_id
+    DailyMenuWriteRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        meal_type:
+          $ref: '#/components/schemas/SessionTypeEnum'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyMenuItemInputRequest'
+      required:
+      - date
+      - items
+      - meal_type
     DependencyCheck:
       type: object
       properties:
@@ -5254,6 +5832,14 @@ components:
         * `pending` - Pending
         * `processed` - Processed
         * `failed` - Failed
+    DirectionEnum:
+      enum:
+      - debit
+      - credit
+      type: string
+      description: |-
+        * `debit` - Debit
+        * `credit` - Credit
     EndSessionRequestRequest:
       type: object
       properties:
@@ -5271,13 +5857,30 @@ components:
     EndSessionResponse:
       type: object
       properties:
-        session:
-          $ref: '#/components/schemas/ScanSession'
-        reconciliation:
-          $ref: '#/components/schemas/ReconciliationSummary'
+        scanned_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        penalty_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        expected_cash:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        variance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        status:
+          type: string
       required:
-      - reconciliation
-      - session
+      - expected_cash
+      - penalty_value
+      - scanned_value
+      - status
+      - variance
     Error:
       type: object
       description: Legacy error shape that reports under `error` rather than `message`.
@@ -5349,6 +5952,40 @@ components:
         active:
           type: boolean
           nullable: true
+    FeatureFlag:
+      type: object
+      properties:
+        key:
+          type: string
+          readOnly: true
+        enabled:
+          type: boolean
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        updated_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - description
+      - enabled
+      - key
+      - updated_at
+      - updated_by
+    FeatureFlagUpdateRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required:
+      - enabled
     FilterEnum:
       enum:
       - day
@@ -5735,6 +6372,75 @@ components:
       - item_id
       - item_name
       - quantity
+    JournalEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        event_type:
+          type: string
+          maxLength: 40
+        memo:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        ref_transaction:
+          type: string
+          format: uuid
+          nullable: true
+        ref_deposit:
+          type: string
+          format: uuid
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalLine'
+          readOnly: true
+      required:
+      - created_at
+      - event_type
+      - id
+      - lines
+    JournalLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        account:
+          type: string
+          readOnly: true
+        account_name:
+          type: string
+          readOnly: true
+        rfid_card:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        direction:
+          $ref: '#/components/schemas/DirectionEnum'
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        balance_after:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+      required:
+      - account
+      - account_name
+      - amount
+      - direction
+      - id
+      - rfid_card
     LastSessionDetails:
       type: object
       properties:
@@ -5758,14 +6464,37 @@ components:
           pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
         student_count:
           type: integer
+        scanned_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        penalty_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        expected_cash:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        variance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        status:
+          type: string
       required:
       - end_time
+      - expected_cash
+      - penalty_value
+      - scanned_value
       - session_id
       - session_status
       - session_type
       - start_time
+      - status
       - student_count
       - total_price
+      - variance
     LoginRequest:
       type: object
       properties:
@@ -5784,6 +6513,18 @@ components:
       properties:
         refresh:
           type: string
+    MenuCopyRequest:
+      type: object
+      properties:
+        source_date:
+          type: string
+          format: date
+        target_date:
+          type: string
+          format: date
+      required:
+      - source_date
+      - target_date
     Message:
       type: object
       description: Legacy success shape with no code, e.g. password change and logout.
@@ -5862,6 +6603,36 @@ components:
           type: string
           format: uuid
           nullable: true
+    OperatorScanAnalytics:
+      type: object
+      properties:
+        operators:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorScanAnalyticsRow'
+      required:
+      - operators
+    OperatorScanAnalyticsRow:
+      type: object
+      properties:
+        operator_id:
+          type: string
+          format: uuid
+        operator_name:
+          type: string
+        nfc_scans:
+          type: integer
+        total_scans:
+          type: integer
+        nfc_share:
+          type: number
+          format: double
+      required:
+      - nfc_scans
+      - nfc_share
+      - operator_id
+      - operator_name
+      - total_scans
     OperatorSessionSummary:
       type: object
       description: |-
@@ -6243,8 +7014,9 @@ components:
           type: boolean
         card_number:
           type: string
-          minLength: 1
-          maxLength: 50
+        card_uid:
+          type: string
+          writeOnly: true
         issued_date:
           type: string
           format: date-time
@@ -6321,6 +7093,217 @@ components:
       description: |-
         * `week` - week
         * `month` - month
+    PreOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        student:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+          readOnly: true
+        card:
+          type: string
+          format: uuid
+        card_number:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+        meal_type:
+          $ref: '#/components/schemas/SessionTypeEnum'
+        status:
+          $ref: '#/components/schemas/PreOrderStatusEnum'
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        cutoff_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreOrderItem'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        note:
+          type: string
+      required:
+      - card
+      - card_number
+      - created_at
+      - cutoff_at
+      - date
+      - id
+      - items
+      - meal_type
+      - student
+      - student_name
+      - total_amount
+    PreOrderCancelRequest:
+      type: object
+      properties:
+        preorder_id:
+          type: string
+          format: uuid
+      required:
+      - preorder_id
+    PreOrderCreateMealTypeEnum:
+      enum:
+      - breakfast
+      - lunch
+      - dinner
+      type: string
+      description: |-
+        * `breakfast` - breakfast
+        * `lunch` - lunch
+        * `dinner` - dinner
+    PreOrderCreateRequest:
+      type: object
+      properties:
+        child_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        meal_type:
+          $ref: '#/components/schemas/PreOrderCreateMealTypeEnum'
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreOrderItemInputRequest'
+      required:
+      - child_id
+      - date
+      - idempotency_key
+      - items
+      - meal_type
+    PreOrderItem:
+      type: object
+      properties:
+        item:
+          type: string
+          format: uuid
+        item_name:
+          type: string
+          readOnly: true
+        quantity:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        fulfilled_quantity:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - item
+      - item_name
+      - quantity
+      - unit_price
+    PreOrderItemInputRequest:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+      required:
+      - item_id
+      - quantity
+    PreOrderListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreOrder'
+      required:
+      - count
+      - results
+    PreOrderMenuItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        max_quantity:
+          type: integer
+      required:
+      - item_id
+      - max_quantity
+      - name
+      - price
+    PreOrderMenuResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        meal_type:
+          type: string
+        can_order:
+          type: boolean
+        cutoff_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreOrderMenuItem'
+      required:
+      - can_order
+      - cutoff_at
+      - date
+      - items
+      - meal_type
+    PreOrderStatusEnum:
+      enum:
+      - placed
+      - fulfilled
+      - cancelled
+      - no_show
+      - expired
+      type: string
+      description: |-
+        * `placed` - Placed
+        * `fulfilled` - Fulfilled
+        * `cancelled` - Cancelled
+        * `no_show` - No show
+        * `expired` - Expired
     ProcessDepositRequest:
       type: object
       properties:
@@ -6353,6 +7336,10 @@ components:
         card_number:
           type: string
           maxLength: 50
+        uid_hex:
+          type: string
+          nullable: true
+          maxLength: 20
         issued_date:
           type: string
           format: date-time
@@ -6371,30 +7358,6 @@ components:
       - created_at
       - id
       - student_or_staff
-    ReconciliationSummary:
-      type: object
-      description: Reconciliation is returned as strings because variance is Decimal.
-      properties:
-        id:
-          type: string
-          format: uuid
-        scanned_value:
-          type: string
-        expected_cash:
-          type: string
-        variance:
-          type: string
-        status:
-          type: string
-        reason:
-          type: string
-      required:
-      - expected_cash
-      - id
-      - reason
-      - scanned_value
-      - status
-      - variance
     ReplaceCard:
       type: object
       properties:
@@ -6403,6 +7366,8 @@ components:
           format: uuid
         new_card_number:
           type: string
+        card_uid:
+          type: string
         reason:
           type: string
           default: ''
@@ -6410,7 +7375,6 @@ components:
           type: boolean
           default: true
       required:
-      - new_card_number
       - old_card_id
     ReplaceCardRequest:
       type: object
@@ -6420,7 +7384,8 @@ components:
           format: uuid
         new_card_number:
           type: string
-          minLength: 1
+        card_uid:
+          type: string
         reason:
           type: string
           default: ''
@@ -6428,7 +7393,6 @@ components:
           type: boolean
           default: true
       required:
-      - new_card_number
       - old_card_id
     ResendInviteRequest:
       type: object
@@ -6613,10 +7577,28 @@ components:
           nullable: true
         card_number:
           type: string
+        card_uid:
+          type: string
+        client_scan_id:
+          type: string
+          format: uuid
+          nullable: true
+        scan_source:
+          $ref: '#/components/schemas/ScanRFIDRequestScanSourceEnum'
         item_id:
           type: string
           format: uuid
           nullable: true
+    ScanRFIDRequestScanSourceEnum:
+      enum:
+      - usb
+      - nfc
+      - manual
+      type: string
+      description: |-
+        * `usb` - usb
+        * `nfc` - nfc
+        * `manual` - manual
     ScanSession:
       type: object
       properties:
@@ -6630,7 +7612,11 @@ components:
         type:
           $ref: '#/components/schemas/SessionTypeEnum'
         status:
-          $ref: '#/components/schemas/SessionStatusEnum'
+          type: string
+          readOnly: true
+        session_status:
+          type: string
+          readOnly: true
         start_at:
           type: string
           format: date-time
@@ -6640,11 +7626,39 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        scanned_value:
+          type: string
+          readOnly: true
+        penalty_value:
+          type: string
+          readOnly: true
+        expected_cash:
+          type: string
+          readOnly: true
+        variance:
+          type: string
+          readOnly: true
       required:
       - end_at
+      - expected_cash
       - id
       - operator
+      - penalty_value
+      - scanned_value
+      - session_status
       - start_at
+      - status
+      - variance
+    ScanSourceEnum:
+      enum:
+      - usb
+      - nfc
+      - manual
+      type: string
+      description: |-
+        * `usb` - USB
+        * `nfc` - NFC
+        * `manual` - Manual
     ScannedData:
       type: object
       properties:
@@ -6671,11 +7685,22 @@ components:
           type: string
           format: date-time
           readOnly: true
+        scan_source:
+          $ref: '#/components/schemas/ScanSourceEnum'
+        preorder_fulfilled:
+          type: boolean
+          readOnly: true
+        payment_breakdown:
+          type: array
+          items: {}
+          readOnly: true
       required:
       - card_number
       - id
       - item_name
       - item_price
+      - payment_breakdown
+      - preorder_fulfilled
       - scanned_at
       - session
       - student_name
@@ -6685,6 +7710,8 @@ components:
         session:
           type: string
           format: uuid
+        scan_source:
+          $ref: '#/components/schemas/ScanSourceEnum'
       required:
       - session
     School:
@@ -6703,8 +7730,9 @@ components:
           maxLength: 255
         number:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
       required:
       - id
@@ -6729,8 +7757,9 @@ components:
           maxLength: 255
         number:
           type: integer
-          maximum: 2147483647
-          minimum: -2147483648
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
       required:
       - name
@@ -6889,6 +7918,10 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        charged_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
         student_name:
           type: string
           readOnly: true
@@ -6904,6 +7937,8 @@ components:
           readOnly: true
         transaction_status:
           $ref: '#/components/schemas/TransactionStatusEnum'
+        scan_source:
+          $ref: '#/components/schemas/ScanSourceEnum'
       required:
       - amount
       - card_number
@@ -6929,6 +7964,39 @@ components:
         * `successful` - Successful
         * `failed` - Failed
         * `penalty` - Penalty
+    TrialBalance:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date
+          nullable: true
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrialBalanceAccount'
+      required:
+      - accounts
+      - as_of
+    TrialBalanceAccount:
+      type: object
+      properties:
+        account:
+          type: string
+        name:
+          type: string
+        debit:
+          type: string
+        credit:
+          type: string
+        net:
+          type: string
+      required:
+      - account
+      - credit
+      - debit
+      - name
+      - net
     User:
       type: object
       properties:

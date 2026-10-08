@@ -25,19 +25,19 @@ class ScanSessionSerializer(serializers.ModelSerializer):
             obj._contract_summary = session_summary(obj)
         return obj._contract_summary
 
-    def get_scanned_value(self, obj):
-        return self._summary(obj)['scanned_value']
+    def get_scanned_value(self, obj) -> str:
+        return f"{self._summary(obj)['scanned_value']:.2f}"
 
-    def get_penalty_value(self, obj):
-        return self._summary(obj)['penalty_value']
+    def get_penalty_value(self, obj) -> str:
+        return f"{self._summary(obj)['penalty_value']:.2f}"
 
-    def get_expected_cash(self, obj):
-        return self._summary(obj)['expected_cash']
+    def get_expected_cash(self, obj) -> str:
+        return f"{self._summary(obj)['expected_cash']:.2f}"
 
-    def get_variance(self, obj):
-        return self._summary(obj)['variance']
+    def get_variance(self, obj) -> str:
+        return f"{self._summary(obj)['variance']:.2f}"
 
-    def get_status(self, obj):
+    def get_status(self, obj) -> str:
         return self._summary(obj)['status']
 
 
@@ -100,14 +100,22 @@ class ScannedDataSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source="item.name", read_only=True)
     item_price = serializers.CharField(source="item.price", read_only=True)
     card_number = serializers.CharField(source="rfid_card.card_number", read_only=True)
+    preorder_fulfilled = serializers.SerializerMethodField()
+    payment_breakdown = serializers.SerializerMethodField()
 
     class Meta:
         model = ScannedData
-        fields = ['id', 'session', 'student_name', 'card_number', 'item_name', 'item_price', 'scanned_at', 'scan_source']
+        fields = ['id', 'session', 'student_name', 'card_number', 'item_name', 'item_price', 'scanned_at', 'scan_source', 'preorder_fulfilled', 'payment_breakdown']
         read_only_fields = ['id', 'scanned_at']
 
     def get_student_name(self, obj) -> str:
         return f"{obj.student_or_staff.first_name} {obj.student_or_staff.last_name}"
+
+    def get_preorder_fulfilled(self, obj) -> bool:
+        return bool(getattr(obj, '_preorder_fulfilled', False))
+
+    def get_payment_breakdown(self, obj) -> list:
+        return getattr(obj, '_payment_breakdown', [])
     
 
 # ------ TRANSACTION SERIALIZER -----

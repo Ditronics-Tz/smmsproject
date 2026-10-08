@@ -20,4 +20,21 @@ Error responses use a `code` (numeric for legacy codes, string for named contrac
 | `CARD_UID_CONFLICT` | The UID conflicts with a registered UID or another card number. | 409 |
 | `INVALID_SCAN_SOURCE` | The scan source is invalid for the supplied identifier. | 400 |
 | `CLIENT_SCAN_ID_CONFLICT` | The idempotency key is already associated with another operator. | 409 |
+| `DAILY_MENU_EXISTS` | A menu already exists for the requested date and meal type. | 409 |
+| `DAILY_MENU_NOT_FOUND` | No menu exists for the requested date and meal type. | 404 |
+| `ITEM_NOT_ON_MENU` | The scanned item is not on today's menu for this meal. | 403 |
+| `MENU_ITEM_HAS_PREORDERS` | A menu item cannot be removed while active pre-orders reference that menu. | 409 |
+| `PREORDER_CUTOFF_PASSED` | The Tanzania-local ordering cutoff has passed. | 400 |
+| `PREORDER_NO_MENU` | No menu exists for the requested date and meal. | 400 |
+| `PREORDER_INSUFFICIENT_BALANCE` | The child has a negative balance or cannot cover the hold. | 400 |
+| `PREORDER_NOT_CANCELLABLE` | The order is no longer placed or the cutoff has passed. | 400 |
+| `PREORDER_QUANTITY_LIMIT` | The item quantity exceeds the configured maximum. | 400 |
+| `PREORDER_DATE_OUT_OF_RANGE` | The requested date is outside the configured preorder window. | 400 |
+| `PREORDER_ITEM_NOT_ON_MENU` | A requested item is not on the selected menu. | 400 |
+| `PREORDER_CARD_INVALID` | The child does not have an active card eligible for this order. | 400 |
+| `INVALID_PREORDER_REQUEST` | Required preorder fields are missing or malformed. | 400 |
+| `PREORDER_CONFLICT` | An active order already exists for this child, date, and meal. | 409 |
+| `IDEMPOTENCY_KEY_CONFLICT` | The idempotency key is associated with another child/order. | 409 |
+| `INVALID_PAGINATION` | Page and page_size must be positive integers. | 400 |
+| `INVALID_MENU_ITEMS` | Menu items must be unique active canteen items. | 400 |
 | 429 | The request was throttled. Retry after the indicated interval. | 429 |

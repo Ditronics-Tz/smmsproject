@@ -5,6 +5,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 from decimal import Decimal
 from django.db import transaction
+from django.db.models import F
 from django.db.models import Q
 from ..models import *
 from ..serializers.sessions import (
@@ -21,6 +22,7 @@ from ..services.audit import log_action, snapshot
 from ..utils import get_admin_scope
 from ..services.cards import normalize_uid
 from ..throttles import OperatorScanThrottle
+from django.conf import settings
 
 
 # --- API FOR SCAN RFID CARD ----- THIS IS THE MAIN FUNCTIONALITY OF THIS SYSTEM -----
@@ -93,46 +95,91 @@ class ScanRFIDCardView(APIView):
             except RFIDCard.DoesNotExist:
                 return Response({'code': 115, 'message': 'Invalid or inactive RFID card'}, status=status.HTTP_404_NOT_FOUND)
 
+            item_price = item.price
+            if getattr(settings, 'MENU_ENFORCED', False):
+                menu_line = DailyMenuItem.objects.select_related('menu').filter(
+                    menu__date=timezone.localdate(), menu__meal_type=session.type,
+                    item=item, item__is_active=True,
+                ).first()
+                if menu_line is None:
+                    return Response({'code': 'ITEM_NOT_ON_MENU', 'detail': 'This item is not on today\'s menu for this meal.'}, status=status.HTTP_403_FORBIDDEN)
+                if menu_line.price_override is not None:
+                    item_price = menu_line.price_override
+
             # Check if student already purchase the item on same session
             if ScannedData.objects.filter(session=session, student_or_staff=student_or_staff, rfid_card=rfid_card, item=item).exists():
                 return Response({'code': 119, "message": "Already purchase this item"}, status=status.HTTP_400_BAD_REQUEST)
 
+            preorder = PreOrder.objects.select_for_update().filter(
+                student=student_or_staff, date=timezone.localdate(),
+                meal_type=session.type, status='placed',
+            ).first()
+            preorder_item = None
+            if preorder is not None:
+                from ..services.preorders import fulfil_preorder_item
+                from ..models import PreOrderItem
+                preorder_item = PreOrderItem.objects.filter(preorder=preorder, item=item, fulfilled_quantity__lt=F('quantity')).first()
+                if preorder_item is not None:
+                    fulfilled = fulfil_preorder_item(preorder, item, actor=user)
+                    if fulfilled is not None:
+                        transaction_record = Transaction.objects.create(
+                            student_or_staff=student_or_staff, rfid_card=rfid_card, item=item,
+                            amount=fulfilled.unit_price, charged_amount=Decimal('0.00'),
+                            transaction_status='successful', session=session, scan_source=scan_source,
+                            preorder_item=fulfilled,
+                        )
+                        scanned_data = ScannedData.objects.create(
+                            session=session, student_or_staff=student_or_staff, rfid_card=rfid_card,
+                            item=item, scan_source=scan_source, client_scan_id=client_scan_id,
+                        )
+                        scanned_data._preorder_fulfilled = True
+                        scanned_data._payment_breakdown = [{'source': 'preorder', 'amount': str(fulfilled.unit_price)}]
+                        preorder.refresh_from_db(fields=['status'])
+                        if preorder.status == 'fulfilled':
+                            from ..services.preorders import notify_preorder
+                            notify_preorder(preorder, 'fulfilled', f'The pre-order for {preorder.date} was fully served.')
+                        return Response(ScannedDataSerializer(scanned_data).data, status=status.HTTP_201_CREATED)
+
             # Check if student has exceeded 10 insufficient meals
-            if rfid_card.insufficient_meal_count >= 10:
+            if rfid_card.insufficient_meal_count >= settings.STRIKE_LIMIT:
                 if student_or_staff.role == 'student':
                     title = f"{student_or_staff.first_name}'s Card Blocked"
-                    message = f"Your child {student_or_staff.first_name} does not get meal today because insuficient balance execeeded 10 times, Please recharge for your child to get a meal. Available Balance is {rfid_card.balance}"
+                    message = f"Your child {student_or_staff.first_name} does not get meal today because insufficient balance exceeded {settings.STRIKE_LIMIT} times. Please recharge. Available balance is {rfid_card.balance}"
                 else: 
                     title = f"Your Card Blocked"
-                    message = f"Your card is blocked as you get penalty 10 times after insuficient balance in your account. Please recharge your account to unblock"
+                    message = f"Your card is blocked after {settings.STRIKE_LIMIT} insufficient-balance penalties. Please recharge your account to unblock it."
                 return Response({'code': 118, 'message': 'Meal denied. Customer exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
 
             # Deduct balance if sufficient funds
             old_balance = rfid_card.balance  # capture before change
-            if rfid_card.balance >= item.price:
-                rfid_card.balance -= item.price
-                amount = item.price
+            if rfid_card.balance >= item_price:
+                rfid_card.balance -= item_price
+                amount = item_price
                 trans_status = 'successful'
                 title = f"Transaction Report"
                 if student_or_staff.role == 'student':
-                    message = f"Your child {student_or_staff.first_name} purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}"
+                    message = f"Your child {student_or_staff.first_name} purchased {item.name} with price {item_price}. The available balance is {rfid_card.balance}"
                 else:
-                    message = f"You purchased {item.name} with price {item.price}. The available balance is {rfid_card.balance}. If is not you contact with our support imidietly"
+                    message = f"You purchased {item.name} with price {item_price}. The available balance is {rfid_card.balance}. If is not you contact with our support imidietly"
             else:
                 # Allow the meal but apply penalty (-500). Clamp to the balance
                 # floor (-500.00) so the invariant enforced by the model remains
                 # satisfied even when the balance was already negative.
-                rfid_card.balance = max(rfid_card.balance - (item.price + 500), Decimal('-500.00'))
+                rfid_card.balance = max(
+                    rfid_card.balance - (item_price + settings.PENALTY_FEE),
+                    Decimal(str(settings.RFID_BALANCE_FLOOR)),
+                )
                 rfid_card.insufficient_meal_count += 1
-                amount = item.price + 500
+                amount = item_price + settings.PENALTY_FEE
                 trans_status = 'penalty'
                 title = f"WARNING: Transaction Penalty"
                 if student_or_staff.role == 'student':
-                    message = f"Your child {student_or_staff.first_name} has purchase {item.name} with price {item.price} and penalty of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your child's card blocked, Please recharge to avoid further penalties"
+                    message = f"Your child {student_or_staff.first_name} has purchased {item.name} for {item_price} with a penalty of {settings.PENALTY_FEE}. Available balance is {rfid_card.balance}. \nWarning: {rfid_card.insufficient_meal_count}/{settings.STRIKE_LIMIT} penalties before the card is blocked. Please recharge."
                 else:
-                    message = f"Your purchase {item.name} with price {item.price} and penalty of -500 Tsh.Available Balance is {rfid_card.balance}. \nWarning: Count left {rfid_card.insufficient_meal_count}/10 before your card blocked, Please recharge to avoid further penalties"
+                    message = f"Your purchase {item.name} costs {item_price} with a penalty of {settings.PENALTY_FEE}. Available balance is {rfid_card.balance}. \nWarning: {rfid_card.insufficient_meal_count}/{settings.STRIKE_LIMIT} penalties before your card is blocked. Please recharge."
 
 
+            charged_amount = old_balance - rfid_card.balance
             rfid_card.save()
 
             # Log transaction
@@ -141,6 +188,7 @@ class ScanRFIDCardView(APIView):
                 rfid_card=rfid_card,
                 item=item,
                 amount=amount,
+                charged_amount=charged_amount,
                 transaction_status=trans_status,
                 session=session,
                 scan_source=scan_source,
@@ -152,21 +200,26 @@ class ScanRFIDCardView(APIView):
                 LedgerEntry.objects.create(
                     rfid_card=rfid_card,
                     event_type='purchase',
-                    amount=-item.price,  # negative for purchase
+                    amount=-charged_amount,  # actual wallet delta
                     balance_before=old_balance,
                     balance_after=rfid_card.balance,
                     ref_transaction=transaction_record,
                 )
             else:  # penalty
-                # For penalty, the transaction.amount already includes the +500 penalty
                 LedgerEntry.objects.create(
                     rfid_card=rfid_card,
                     event_type='penalty',
-                    amount=-(item.price + 500),  # negative for the full penalty deduction
+                    amount=-charged_amount,
                     balance_before=old_balance,  # captured before penalty was applied
                     balance_after=rfid_card.balance,
                     ref_transaction=transaction_record,
                 )
+
+            from ..services.ledger import post_penalty, post_purchase
+            if trans_status == 'successful':
+                post_purchase(transaction_record, actor=user)
+            else:
+                post_penalty(transaction_record, actor=user)
 
             try:
                 log_action('create', obj=transaction_record, after=snapshot(transaction_record))
@@ -196,7 +249,7 @@ class ScanRFIDCardView(APIView):
                 if trans_status == 'penalty':
                     try:
                         from ..services.sms import send_critical_sms
-                        sms_body = f"SMMS penalty: {student_or_staff.first_name} charged {amount} (incl. 500 penalty). Balance {rfid_card.balance}. Top up to avoid blocking."
+                        sms_body = f"SMMS penalty: {student_or_staff.first_name} charged {charged_amount} (incl. {settings.PENALTY_FEE} penalty). Balance {rfid_card.balance}. Top up to avoid blocking."
                         send_critical_sms(parent_entry.parent, sms_body, notification=notif)
                     except Exception:
                         pass
@@ -278,6 +331,11 @@ class EndScanSessionView(APIView):
             totals = session_summary(session)
             scanned_total = totals['scanned_value']
 
+            from ..services.preorders import release_preorder
+            open_orders = PreOrder.objects.filter(date=timezone.localdate(), meal_type=session.type, status='placed')
+            for order in open_orders:
+                release_preorder(order, status_value='no_show', actor=user, fee=settings.PREORDER_NOSHOW_FEE)
+
             # Read expected cash from request (operator inputs actual till amount)
             expected_cash = Decimal(request.data.get('expected_cash', '0.00') or '0.00')
 
@@ -309,10 +367,10 @@ class EndScanSessionView(APIView):
 
             totals = session_summary(session)
             return Response({
-                'scanned_value': str(totals['scanned_value']),
-                'penalty_value': str(totals['penalty_value']),
-                'expected_cash': str(totals['expected_cash']),
-                'variance': str(totals['variance']),
+                'scanned_value': f"{totals['scanned_value']:.2f}",
+                'penalty_value': f"{totals['penalty_value']:.2f}",
+                'expected_cash': f"{totals['expected_cash']:.2f}",
+                'variance': f"{totals['variance']:.2f}",
                 'status': totals['status'],
             }, status=status.HTTP_200_OK)
         except Exception as e:

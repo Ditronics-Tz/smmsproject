@@ -8,7 +8,7 @@ from smmsapp.models import Reconciliation, Transaction
 def session_summary(session):
     transactions = Transaction.objects.filter(session=session, is_voided=False)
     scanned_value = transactions.filter(transaction_status='successful').aggregate(
-        total=Sum('item__price'),
+        total=Sum('amount'),
     )['total'] or Decimal('0.00')
     penalty_value = transactions.filter(transaction_status='penalty').aggregate(
         total=Sum(F('amount') - F('item__price')),

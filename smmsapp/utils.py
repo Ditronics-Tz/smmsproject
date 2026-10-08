@@ -41,7 +41,7 @@ def generate_end_of_day_report(school=None):
 
     transactions = Transaction.objects.filter(tx_filter)
 
-    total_sales = transactions.aggregate(Sum('amount'))['amount__sum'] or 0
+    total_sales = transactions.aggregate(Sum('charged_amount'))['charged_amount__sum'] or 0
 
     available_balance = RFIDCard.objects.filter(card_filter).aggregate(Sum('balance'))['balance__sum'] or 0
     start_balance = available_balance + total_sales
@@ -74,7 +74,7 @@ def generate_parent_end_of_day_report(request):
 
     for student in students:
         available_balance = RFIDCard.objects.filter(student_or_staff=student.student).aggregate(Sum('balance'))['balance__sum'] or 0
-        expenditure = Transaction.objects.filter(transaction_date__date=today, student_or_staff=student.student).aggregate(Sum('amount'))['amount__sum'] or 0
+        expenditure = Transaction.objects.filter(transaction_date__date=today, student_or_staff=student.student).aggregate(Sum('charged_amount'))['charged_amount__sum'] or 0
         start_balance = available_balance + expenditure
         remaining_balance = available_balance
 
@@ -91,7 +91,7 @@ def generate_parent_end_of_day_report(request):
 
     # Get all transactions for today for all children
     transactions = Transaction.objects.filter(transaction_date__date=today, student_or_staff__in=[s.student for s in students])
-    total_debt = transactions.filter(transaction_status="penalty").aggregate(Sum('amount'))['amount__sum'] or 0
+    total_debt = transactions.filter(transaction_status="penalty").aggregate(Sum('charged_amount'))['charged_amount__sum'] or 0
 
     # Render the HTML template
     html_string = render_to_string("parent_report.html", {

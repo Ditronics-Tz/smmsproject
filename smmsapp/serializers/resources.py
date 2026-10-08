@@ -108,7 +108,7 @@ class TransactionSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     class Meta:
         model =  Transaction
-        fields = ['id','amount','student_name', 'card_number','item_name','transaction_date','transaction_status','scan_source']
+        fields = ['id','amount','charged_amount','student_name', 'card_number','item_name','transaction_date','transaction_status','scan_source']
 
     def get_student_name(self, obj) -> str:
         return f'{obj.student_or_staff.first_name} {obj.student_or_staff.last_name}'

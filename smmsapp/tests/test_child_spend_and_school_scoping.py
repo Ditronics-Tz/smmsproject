@@ -62,16 +62,16 @@ class Base(TestCase):
         # student A: one successful purchase today + one penalty today
         Transaction.objects.create(
             student_or_staff=cls.student_a, rfid_card=cls.card_a, item=cls.item,
-            amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
+            amount=Decimal("1500.00"), charged_amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
         )
         Transaction.objects.create(
             student_or_staff=cls.student_a, rfid_card=cls.card_a, item=cls.item,
-            amount=Decimal("2000.00"), transaction_status="penalty", session=cls.session,
+            amount=Decimal("2000.00"), charged_amount=Decimal("2000.00"), transaction_status="penalty", session=cls.session,
         )
         # student B: one purchase in school B
         Transaction.objects.create(
             student_or_staff=cls.student_b, rfid_card=cls.card_b, item=cls.item,
-            amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
+            amount=Decimal("1500.00"), charged_amount=Decimal("1500.00"), transaction_status="successful", session=cls.session,
         )
 
         ParentStudent.objects.create(parent=cls.parent_a, student=cls.student_a)

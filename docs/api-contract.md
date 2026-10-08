@@ -37,6 +37,8 @@ Errors use the existing numeric `code` and human-readable `message` response fie
 
 Session list responses and the operator's `/api/v1/dashboard/last-session` detail also carry these summary values. The session list's `status` is the reconciliation status; `session_status` retains the lifecycle state (`active`, `completed`, or `cancelled`).
 
+Wallet transactions retain `charged_amount` as the actual wallet delta; the session summary's `scanned_value` is the value of successful meal scans, including pre-order fulfilments, and is separate from that wallet delta.
+
 ## Deployment config and feature flags
 
 `GET /api/v1/config/public` is unauthenticated and returns branding, currency, and locale only. It never returns secrets or feature flag values.
@@ -54,11 +56,35 @@ Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the databas
 - `PARENT_LIMITS`: parent balance-threshold API and its scheduled low-balance sweep.
 - `NFC_SCAN`: scan requests that supply `card_uid`. Existing USB/RFID requests using `card_number` remain available regardless of this flag. NFC UIDs are normalized to uppercase hexadecimal and matched against `RFIDCard.uid_hex`.
 
-The current backend has no preorder, sponsorship, integration, or stock endpoints. Their flags are available to clients/configuration and are included in profiles, but there is no corresponding route to gate yet. `build_insights` skips work while `INSIGHTS` is disabled. There is no `build_daily_stats` task in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
+`PREORDER` gates the preorder API and its scan fulfilment path. Sponsorship, integration, and stock flags are available to clients/configuration and included in profiles, but there are no corresponding routes to gate yet. `build_insights` skips work while `INSIGHTS` is disabled. There is no `build_daily_stats` task in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
 
 ## Card UID/NFC scanning
 
 `POST /api/v1/sessions/scan-card` accepts exactly one of `card_number` or `card_uid`. UID scans require `NFC_SCAN`; send `scan_source: "nfc"` (inferred if omitted). USB scans default to `scan_source: "usb"`. Optional `client_scan_id` makes retries idempotent. Scans are rate-limited per operator using `SCAN_THROTTLE_RATE` (default 120/minute). Card UID format and the outstanding physical-card investigation are documented in `docs/card-identifiers.md`.
+
+## Daily menu
+
+- `GET /api/v1/menu/daily?date=YYYY-MM-DD` and `GET /api/v1/menu/daily/{id}` (admin)
+- `POST /api/v1/menu/daily` and `PUT /api/v1/menu/daily/{id}` with `{ date, meal_type, items: [{ item_id, price_override? }] }` (admin)
+- `DELETE /api/v1/menu/daily/{id}` and `POST /api/v1/menu/copy` with `{ source_date, target_date }` (admin)
+- `GET /api/v1/menu/today?meal_type=breakfast|lunch|dinner` (operator)
+
+Menu item `price` is the override when present, otherwise the canteen item's current price. `MENU_ENFORCED` defaults off; when enabled, scans must use an item on today's menu for the active session's meal type, and use the menu price.
+
+## Pre-orders (BE-149–155)
+
+Pre-orders are for a future date within `PREORDER_MAX_DAYS_AHEAD` (default 1); the default cutoff is 18:00 Africa/Dar_es_Salaam on the previous day. A successful create holds funds in `2100 PREORDER_HOLD`; serving an ordered item transfers its held value to canteen revenue. Cancellation, no-show, and expiry return unserved held funds, less the configured no-show fee where applicable. A fulfilled-order reversal restores the value to the wallet.
+
+- `GET /api/v1/preorders/menu?date=YYYY-MM-DD&child_id=<uuid>&meal_type=lunch`
+- `POST /api/v1/preorders/create` with `child_id`, `date`, `meal_type`, `idempotency_key`, and `items: [{item_id, quantity}]`
+- `POST /api/v1/preorders/cancel` with `preorder_id`
+- `GET /api/v1/preorders/list` (supports `status`, `date`, `child_id`, pagination)
+- `GET /api/v1/preorders/summary?date=YYYY-MM-DD` (admin/operator kitchen sheet)
+- `GET /api/v1/preorders/session?session_id=<uuid>` (own operator session or admin)
+
+Parent reads are limited to linked children. `PREORDER` gates all preorder endpoints. Menu items referenced by active pre-orders cannot be removed.
+
+If a card is replaced between ordering and the meal, the placed order follows the student: the replacement flow transfers its held balance to the new card and updates the order's protected card reference. The original card's wallet carry policy remains controlled by `carry_balance`.
 
 ## Customer feature profiles
 

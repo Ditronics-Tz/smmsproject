@@ -14,6 +14,7 @@ User = get_user_model()
 FLAGS = {
     'ANALYTICS': False, 'INSIGHTS': False, 'LEDGER_UI': False,
     'PAYMENTS': False, 'MENU': False, 'PREORDERS': False,
+    'PREORDER': False,
     'SPONSORSHIP': False, 'INTEGRATIONS': False, 'STOCK': False,
     'PARENT_LIMITS': False, 'NFC_SCAN': False,
 }

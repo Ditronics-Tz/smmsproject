@@ -38,9 +38,10 @@ def is_enabled(key):
     if key not in defaults:
         raise KeyError(key)
 
-    key = _cache_key()
-    flags = cache.get(key)
+    feature_key = key
+    cache_key = _cache_key()
+    flags = cache.get(cache_key)
     if flags is None:
         flags = all_flags()
-        cache.set(key, flags, _CACHE_TIMEOUT)
-    return flags[key]
+        cache.set(cache_key, flags, _CACHE_TIMEOUT)
+    return flags[feature_key]

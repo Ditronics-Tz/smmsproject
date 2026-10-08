@@ -1,4 +1,16 @@
 from rest_framework import serializers
+
+
+class OperatorScanAnalyticsRowSerializer(serializers.Serializer):
+    operator_id = serializers.UUIDField()
+    operator_name = serializers.CharField()
+    nfc_scans = serializers.IntegerField()
+    total_scans = serializers.IntegerField()
+    nfc_share = serializers.FloatField()
+
+
+class OperatorScanAnalyticsSerializer(serializers.Serializer):
+    operators = OperatorScanAnalyticsRowSerializer(many=True)
 from datetime import date
 
 # ---- COUNTS SERIALIZER -----

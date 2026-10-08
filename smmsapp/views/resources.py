@@ -793,23 +793,37 @@ class ReplaceCardView(APIView):
                 control_number = ctrl_generator.generate_control_number(school.number)
 
                 # Create the new active card with the carried-over balance.
+                carried_balance = old_card.balance if carry_balance else Decimal('0.00')
                 new_card = RFIDCard.objects.create(
                     card_number=new_card_number,
                     uid_hex=uid_hex,
                     control_number=control_number,
                     student_or_staff=student_or_staff,
                     balance=old_card.balance if carry_balance else 0.0,
+                    held_balance=old_card.held_balance,
                     insufficient_meal_count=old_card.insufficient_meal_count,
                     is_active=True,
                     issued_date=timezone.now(),
                 )
+
+                if carry_balance:
+                    from ..services.ledger import post_replacement
+                    old_balance = old_card.balance
+                    post_replacement(old_card, new_card, old_balance, actor=request.user)
+                    old_card.balance = 0
+
+                if old_card.held_balance:
+                    from ..services.ledger import post_preorder_card_transfer
+                    post_preorder_card_transfer(old_card, new_card, old_card.held_balance, actor=request.user)
+                    PreOrder.objects.filter(card=old_card, status='placed').update(card=new_card)
+                    old_card.held_balance = 0
 
                 # Record the balance migration on the new card for audit.
                 from ..models import LedgerEntry
                 LedgerEntry.objects.create(
                     rfid_card=new_card,
                     event_type='card_replacement',
-                    amount=old_card.balance if carry_balance else 0,
+                    amount=carried_balance,
                     balance_before=0,
                     balance_after=new_card.balance,
                 )
@@ -824,7 +838,7 @@ class ReplaceCardView(APIView):
                 # Deactivate the old card — instantly unusable for scans (scan
                 # lookups filter is_active=True).
                 old_card.is_active = False
-                old_card.save(update_fields=['is_active'])
+                old_card.save(update_fields=['is_active', 'balance', 'held_balance'])
 
                 # Audit link old -> new.
                 try:
