@@ -1,7 +1,8 @@
 from django.contrib.auth.models import AbstractUser
+from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Q, CheckConstraint
+from django.db.models import F, Q, CheckConstraint
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from decimal import Decimal
@@ -13,7 +14,7 @@ import os
 # penalty or deduction may push a balance below zero. It is enforced both in
 # the model (validators + DB CHECK constraint) so no code path, admin action,
 # or script can drive a card arbitrarily negative.
-RFID_BALANCE_FLOOR = Decimal('-500.00')
+RFID_BALANCE_FLOOR = Decimal(settings.RFID_BALANCE_FLOOR)
 
 # --- function to save profile image
 def user_profile_path(instance, filename):
@@ -111,6 +112,7 @@ class RFIDCard(models.Model):
         default=0.0,
         validators=[MinValueValidator(RFID_BALANCE_FLOOR)],
     )
+    held_balance = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     insufficient_meal_count = models.PositiveIntegerField(default=0)  # Field to track insufficient meals
     is_active = models.BooleanField(default=True)
     issued_date = models.DateTimeField(null=True, blank=True)
@@ -123,6 +125,7 @@ class RFIDCard(models.Model):
                 check=Q(balance__gte=RFID_BALANCE_FLOOR),
                 name='rfidcard_balance_floor_gte_minus500',
             ),
+            CheckConstraint(check=Q(held_balance__gte=0), name='rfidcard_held_balance_nonnegative'),
         ]
 
     def __str__(self):
@@ -207,6 +210,37 @@ class CanteenItem(models.Model):
     def __str__(self):
         return self.name
 
+
+class DailyMenu(models.Model):
+    MEAL_TYPE_CHOICES = [
+        ('breakfast', 'Breakfast'), ('lunch', 'Lunch'), ('dinner', 'Dinner'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    date = models.DateField(db_index=True)
+    meal_type = models.CharField(max_length=50, choices=MEAL_TYPE_CHOICES)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['date', 'meal_type'], name='uniq_daily_menu_date_meal')]
+        ordering = ['date', 'meal_type']
+
+    def __str__(self):
+        return f'{self.date} {self.meal_type} menu'
+
+
+class DailyMenuItem(models.Model):
+    menu = models.ForeignKey(DailyMenu, on_delete=models.CASCADE, related_name='items')
+    item = models.ForeignKey(CanteenItem, on_delete=models.PROTECT, related_name='daily_menu_entries')
+    price_override = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['menu', 'item'], name='uniq_daily_menu_item')]
+
+    def __str__(self):
+        return f'{self.menu}: {self.item}'
+
 # ----- SCAN SESSION TABLE ------
 class ScanSession(models.Model):
     STATUS_CHOICES = [
@@ -247,6 +281,7 @@ class Transaction(models.Model):
     rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
     item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    charged_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     transaction_date = models.DateTimeField(auto_now_add=True)
     transaction_status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     session = models.ForeignKey(
@@ -256,6 +291,7 @@ class Transaction(models.Model):
     is_voided = models.BooleanField(default=False, db_index=True, help_text='Set when a reversal restores the balance')
     SCAN_SOURCE_CHOICES = [('usb', 'USB'), ('nfc', 'NFC'), ('manual', 'Manual')]
     scan_source = models.CharField(max_length=10, choices=SCAN_SOURCE_CHOICES, default='usb')
+    preorder_item = models.ForeignKey('PreOrderItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
 
     def __str__(self):
         return f"{self.student_or_staff.username} - {self.item.name} - ${self.amount}"
@@ -280,10 +316,14 @@ class Notification(models.Model):
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, null=True, blank=True)  # Optional
     title = models.CharField(max_length=100, null=True, blank=True)
     message = models.TextField()
+    dedupe_key = models.CharField(max_length=160, null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     retry_count = models.IntegerField(default=0)
     type = models.CharField(max_length=15, choices=TYPE_CHOICES, default='message')  # Type of notification
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['recipient', 'dedupe_key'], condition=Q(dedupe_key__isnull=False), name='uniq_notification_recipient_dedupe')]
 
     def __str__(self):
         return f"Notification for {self.recipient.first_name}: {self.type} - {self.status}"
@@ -351,6 +391,120 @@ class LedgerEntry(models.Model):
 
     def __str__(self):
         return f"{self.get_event_type_display()} {self.rfid_card.card_number} bal:{self.balance_before}→{self.balance_after}"
+
+
+class LedgerAccount(models.Model):
+    ACCOUNT_TYPES = [('asset', 'Asset'), ('liability', 'Liability'), ('equity', 'Equity'), ('income', 'Income'), ('expense', 'Expense')]
+    code = models.CharField(max_length=10, unique=True)
+    name = models.CharField(max_length=100)
+    type = models.CharField(max_length=12, choices=ACCOUNT_TYPES)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['code']
+
+    def __str__(self):
+        return f'{self.code} {self.name}'
+
+
+class JournalEntry(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event_type = models.CharField(max_length=40)
+    idempotency_key = models.CharField(max_length=200, unique=True)
+    ref_transaction = models.ForeignKey(Transaction, on_delete=models.PROTECT, null=True, blank=True, related_name='journal_entries')
+    ref_deposit = models.ForeignKey(BankDeposit, on_delete=models.PROTECT, null=True, blank=True, related_name='journal_entries')
+    ref_reversal = models.ForeignKey('Reversal', on_delete=models.PROTECT, null=True, blank=True, related_name='journal_entries')
+    memo = models.TextField(blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['event_type', 'created_at'])]
+
+    def save(self, *args, **kwargs):
+        if self.pk and JournalEntry.objects.filter(pk=self.pk).exists():
+            raise ValueError('Journal entries are append-only.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError('Journal entries are append-only.')
+
+
+class JournalLine(models.Model):
+    DIRECTIONS = [('debit', 'Debit'), ('credit', 'Credit')]
+    entry = models.ForeignKey(JournalEntry, on_delete=models.PROTECT, related_name='lines')
+    account = models.ForeignKey(LedgerAccount, on_delete=models.PROTECT, related_name='lines')
+    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.PROTECT, null=True, blank=True, related_name='journal_lines')
+    direction = models.CharField(max_length=6, choices=DIRECTIONS)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    balance_after = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['rfid_card', 'created_at']),
+            models.Index(fields=['account', 'created_at']),
+        ]
+        constraints = [
+            models.CheckConstraint(check=Q(amount__gt=0), name='journal_line_amount_positive'),
+            models.CheckConstraint(check=Q(direction__in=['debit', 'credit']), name='journal_line_direction_valid'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk and JournalLine.objects.filter(pk=self.pk).exists():
+            raise ValueError('Journal lines are append-only.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError('Journal lines are append-only.')
+
+
+class LedgerIntegrityRun(models.Model):
+    STATUS_CHOICES = [('ok', 'OK'), ('mismatch', 'Mismatch')]
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
+    checked_at = models.DateTimeField(auto_now_add=True)
+    global_balanced = models.BooleanField(default=False)
+    mismatched_cards = models.JSONField(default=list)
+    result = models.JSONField(default=dict)
+
+
+class PreOrder(models.Model):
+    STATUS_CHOICES = [
+        ('placed', 'Placed'), ('fulfilled', 'Fulfilled'), ('cancelled', 'Cancelled'),
+        ('no_show', 'No show'), ('expired', 'Expired'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    student = models.ForeignKey(CustomUser, on_delete=models.PROTECT, related_name='preorders')
+    card = models.ForeignKey(RFIDCard, on_delete=models.PROTECT, related_name='preorders')
+    date = models.DateField(db_index=True)
+    meal_type = models.CharField(max_length=50, choices=ScanSession.SESSION_TYPE_CHOICES)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='placed', db_index=True)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    cutoff_at = models.DateTimeField()
+    idempotency_key = models.CharField(max_length=128, unique=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_preorders')
+    created_at = models.DateTimeField(auto_now_add=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['student', 'date', 'meal_type'], condition=Q(status='placed'), name='uniq_active_preorder_student_date_meal')]
+        indexes = [models.Index(fields=['date', 'meal_type', 'status'])]
+
+
+class PreOrderItem(models.Model):
+    preorder = models.ForeignKey(PreOrder, on_delete=models.CASCADE, related_name='items')
+    item = models.ForeignKey(CanteenItem, on_delete=models.PROTECT, related_name='preorder_items')
+    quantity = models.PositiveSmallIntegerField()
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    fulfilled_quantity = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['preorder', 'item'], name='uniq_preorder_item'),
+            models.CheckConstraint(check=Q(quantity__gt=0), name='preorder_item_quantity_positive'),
+            models.CheckConstraint(check=Q(fulfilled_quantity__lte=F('quantity')), name='preorder_fulfilled_not_over_quantity'),
+        ]
 
 
 # ------ RECONCILIATION TABLE ------

@@ -33,6 +33,24 @@ def build_insights():
     from .services.insights import build_impossible_scan_flags
     return build_impossible_scan_flags()
 
+
+@shared_task
+def check_ledger_integrity():
+    from .services.ledger import check_ledger_integrity as run_check
+    return run_check(persist=True)
+
+
+@shared_task
+def expire_preorders():
+    from django.utils import timezone
+    from .models import PreOrder
+    from .services.preorders import release_preorder
+    count = 0
+    for order in PreOrder.objects.filter(status='placed', date__lt=timezone.localdate()).iterator():
+        release_preorder(order, status_value='expired')
+        count += 1
+    return count
+
 @shared_task
 def send_pending_notifications():
     """Celery task to send pending notifications via FCM and Email."""

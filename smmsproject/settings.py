@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import os
 import json
+from decimal import Decimal
 from dotenv import load_dotenv
 from datetime import timedelta
 from django.core.exceptions import ImproperlyConfigured
@@ -127,6 +128,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.build_insights",
         "schedule": crontab(minute="*/5"),
     },
+    "check-ledger-integrity": {
+        "task": "smmsapp.tasks.check_ledger_integrity",
+        "schedule": crontab(hour=2, minute=30),
+    },
+    "expire-preorders": {
+        "task": "smmsapp.tasks.expire_preorders",
+        "schedule": crontab(hour=23, minute=30),
+    },
     "audit-purge": {
         "task": "smmsapp.tasks.audit_purge",
         "schedule": crontab(hour=2, minute=0),  # Daily 02:00
@@ -135,9 +144,14 @@ CELERY_BEAT_SCHEDULE = {
 
 # Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
 DEFAULT_BALANCE_THRESHOLD = '1000.00'
+MENU_ENFORCED = os.getenv('MENU_ENFORCED', 'False') == 'True'
+RFID_BALANCE_FLOOR = os.getenv('RFID_BALANCE_FLOOR', '-500.00')
+PENALTY_FEE = Decimal(os.getenv('PENALTY_FEE', '500.00'))
+STRIKE_LIMIT = int(os.getenv('STRIKE_LIMIT', '10'))
+STRIKE_RESET_ON_DEPOSIT = os.getenv('STRIKE_RESET_ON_DEPOSIT', 'False') == 'True'
 
 FEATURE_KEYS = (
-    'ANALYTICS', 'INSIGHTS', 'LEDGER_UI', 'PAYMENTS', 'MENU', 'PREORDERS',
+    'ANALYTICS', 'INSIGHTS', 'LEDGER_UI', 'PAYMENTS', 'MENU', 'PREORDER', 'PREORDERS',
     'SPONSORSHIP', 'INTEGRATIONS', 'STOCK', 'PARENT_LIMITS', 'NFC_SCAN',
 )
 try:
@@ -291,6 +305,7 @@ SPECTACULAR_SETTINGS = {
         'NotificationStatusEnum': 'smmsapp.models.Notification.STATUS_CHOICES',
         'ReconciliationStatusEnum': 'smmsapp.models.Reconciliation.STATUS_CHOICES',
         'SMSLogStatusEnum': 'smmsapp.models.SMSLog.STATUS_CHOICES',
+        'ScanSourceEnum': 'smmsapp.models.Transaction.SCAN_SOURCE_CHOICES',
     },
 }
 
@@ -316,10 +331,19 @@ SIMPLE_JWT = {
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'Africa/Nairobi'
+CELERY_TIMEZONE = os.getenv('CELERY_TIMEZONE', 'Africa/Dar_es_Salaam')
 
 USE_I18N = True
 
 USE_TZ = True
+
+# Parent pre-orders are evaluated in the school's local timezone.
+PREORDER_TIME_ZONE = os.getenv('PREORDER_TIME_ZONE', 'Africa/Dar_es_Salaam')
+PREORDER_CUTOFF_TIME = os.getenv('PREORDER_CUTOFF_TIME', '18:00')
+PREORDER_MAX_DAYS_AHEAD = int(os.getenv('PREORDER_MAX_DAYS_AHEAD', '1'))
+PREORDER_MAX_QTY_PER_ITEM = int(os.getenv('PREORDER_MAX_QTY_PER_ITEM', '1'))
+PREORDER_NOSHOW_FEE = Decimal(os.getenv('PREORDER_NOSHOW_FEE', '0.00'))
+PREORDER_REMINDER_ENABLED = os.getenv('PREORDER_REMINDER_ENABLED', 'False').lower() == 'true'
 
 
 # Static files (CSS, JavaScript, Images)
