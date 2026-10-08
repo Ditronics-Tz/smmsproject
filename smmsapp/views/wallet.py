@@ -2,6 +2,7 @@ from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
+from django_filters.rest_framework import DjangoFilterBackend
 from decimal import Decimal
 
 from django.db import transaction
@@ -13,10 +14,10 @@ from ..models import (
     RFIDCard, BankDeposit, Transaction, LedgerEntry,
     ScanSession, Reconciliation, Reversal, CustomUser,
 )
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 from ..serializers.system import CodeMessageSerializer
 from ..serializers.resources import TransactionSerializer
-from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminOrParent
+from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminOrParent, IsAdminOperatorOrParent
 from ..services.audit import log_action, snapshot
 from ..serializers.wallet import (
     CreateDepositSerializer,
@@ -38,14 +39,14 @@ class CreateDepositView(APIView):
 
     def post(self, request):
         user = request.user
-        card_number = request.data.get('card_number')
-        amount = request.data.get('amount')
-
-        if not card_number or not amount:
+        serializer = CreateDepositSerializer(data=request.data)
+        if not serializer.is_valid():
             return Response(
-                {'code': 400, 'message': 'card_number and amount are required'},
+                {'code': 400, 'message': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        data = serializer.validated_data
+        card_number = data['card_number']
 
         # Validate the card exists and user has access (parent via ParentStudent, or staff)
         try:
@@ -72,7 +73,10 @@ class CreateDepositView(APIView):
         # Create the pending deposit
         deposit = BankDeposit.objects.create(
             control_number=rfid_card.control_number,
-            amount=Decimal(amount),
+            amount=data['amount'],
+            payment_method=data['payment_method'],
+            provider=data['provider'],
+            reference=data.get('reference') or None,
             status='pending',
             submitted_by=user if user.role in ('parent', 'staff') else None,
         )
@@ -101,18 +105,38 @@ class CreateDepositView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(parameters=[
+    OpenApiParameter('payment_method', OpenApiTypes.STR, enum=['cash', 'mobile_money']),
+    OpenApiParameter('provider', OpenApiTypes.STR),
+    OpenApiParameter('status', OpenApiTypes.STR, enum=['pending', 'processed', 'failed']),
+    OpenApiParameter('from', OpenApiTypes.DATE, description='Inclusive start date.'),
+    OpenApiParameter('to', OpenApiTypes.DATE, description='Inclusive end date.'),
+])
 class DepositListView(generics.ListAPIView):
     """List deposits: parent sees own; admin/operator sees all."""
     serializer_class = BankDepositSerializer
     pagination_class = CardLedgerPagination
-    permission_classes = [IsAdminOrOperator]
+    permission_classes = [IsAdminOperatorOrParent]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['payment_method', 'provider', 'status']
 
     def get_queryset(self):
+        from django.utils.dateparse import parse_date
+        if getattr(self, 'swagger_fake_view', False):
+            return BankDeposit.objects.none()
         user = self.request.user
         if user.role == 'admin' or user.role == 'operator':
-            return BankDeposit.objects.all().order_by('-created_at')
-        # parent: only their own deposits (those where submitted_by = user)
-        return BankDeposit.objects.filter(submitted_by=user).order_by('-created_at')
+            queryset = BankDeposit.objects.all()
+        else:
+            # Parent: only their own deposits (those where submitted_by = user)
+            queryset = BankDeposit.objects.filter(submitted_by=user)
+        date_from = parse_date(self.request.query_params.get('from', ''))
+        date_to = parse_date(self.request.query_params.get('to', ''))
+        if date_from:
+            queryset = queryset.filter(created_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(created_at__date__lte=date_to)
+        return queryset.order_by('-created_at')
 
 
 @extend_schema(tags=['wallet'], request=ProcessDepositSerializer,

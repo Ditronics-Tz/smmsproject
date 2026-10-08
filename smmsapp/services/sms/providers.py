@@ -10,7 +10,8 @@ class LogSMSProvider(BaseSMSProvider):
     name = "log"
 
     def send(self, to: str, body: str) -> SMSResult:
-        logger.info(f"[SMS:log] to={to} body={body[:120]}")
+        # SMS bodies may contain one-time credentials or invite links.
+        logger.info("[SMS:log] message accepted for delivery to %s", to)
         return SMSResult(success=True, provider_sid=f"log-{uuid.uuid4().hex[:12]}", segments=1, cost_estimate=0)
 
 class TwilioSMSProvider(BaseSMSProvider):

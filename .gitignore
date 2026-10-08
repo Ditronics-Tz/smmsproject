@@ -20,3 +20,4 @@ smms-project-304ac-firebase-adminsdk-fbsvc-54c852dcec.json
 send_pending_logs.log
 *.log
 uploads/
+.DS_Store

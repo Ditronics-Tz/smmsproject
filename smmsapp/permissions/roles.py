@@ -25,3 +25,7 @@ class IsAdminOrOperator(BasePermission):
         if request.user.is_authenticated and request.user.role in ['admin','operator']:
             return True
         return False
+
+class IsAdminOperatorOrParent(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role in ['admin', 'operator', 'parent']

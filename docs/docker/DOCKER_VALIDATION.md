@@ -204,7 +204,7 @@ This document validates that all required Docker configuration files have been c
 ---
 
 ### 9. ✅ README_DOCKER.md
-**Location**: `/README_DOCKER.md`
+**Location**: `docs/docker/README_DOCKER.md`
 
 **Content Sections**:
 - ✅ Overview and key features
@@ -426,7 +426,7 @@ make size
 | Makefile | Build Tool | ✅ | /Makefile |
 | .env.example | Template | ✅ | /.env.example |
 | docker-build.sh | Script | ✅ | /docker-build.sh |
-| README_DOCKER.md | Documentation | ✅ | /README_DOCKER.md |
+| README_DOCKER.md | Documentation | ✅ | docs/docker/README_DOCKER.md |
 | Settings updates | Code | ✅ | /smmsproject/settings.py |
 
 ---

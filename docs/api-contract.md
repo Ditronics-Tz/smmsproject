@@ -1,0 +1,32 @@
+# API contract
+
+This document records the backend agreement for the frontend and API changes in BE-130, BE-165, and BE-166. The versioned endpoints are served under `/api/v1/`; legacy unversioned routes remain available during migration.
+
+## Deposit list and detail
+
+`GET /api/v1/wallet/deposit/list` returns paginated deposits. Pagination keeps the existing response shape and page size.
+
+Each deposit includes:
+
+- `payment_method`: `cash` or `mobile_money`. Existing records are treated as `cash`.
+- `provider`: `null` for cash; the mobile money provider for mobile money payments.
+- `reference`: provider reference or bank slip reference, or `null` when absent.
+- `phone_masked`: the submitter's masked phone number, such as `+255 7** *** 123`. The full number is never returned by deposit responses.
+
+The list accepts `payment_method`, `provider`, `status`, `from`, and `to` query parameters. `from` and `to` are inclusive dates in `YYYY-MM-DD` format. Administrators and operators can list all deposits; parents can list only deposits they submitted.
+
+Deposit creation accepts the same payment details. Cash deposits must have a null provider. Mobile money deposits require a provider.
+
+## User password state and invites
+
+Admin user list and detail responses include read-only `password_set`, which is true only when the user has a usable password.
+
+Creating a user issues a single-use password-setting invite. The invite is sent by email when an email address is present, otherwise by SMS when a mobile number is present. The create response includes `invite_link` only when neither contact method is available. The raw invite token is never stored in notifications, audit details, or SMS log records.
+
+`POST /api/v1/auth/resend-invite` accepts `{ "user_id": "<UUID>" }` and is restricted to administrators. It invalidates previous unused password reset/invite tokens, issues a new token, and sends the invite by email or SMS when possible. If the user has neither contact method, the response includes `invite_link` once. Requests are limited to five per minute per administrator.
+
+The invite link opens `/auth/accept-invite` with its one-time token in the URL fragment. The page submits the token to `POST /api/v1/auth/reset-password/confirm` with `{ "token": "<token>", "new_password": "<password>" }`. The token is single-use and expires after 30 minutes. Keeping it in the fragment prevents it from being sent in the initial HTTP request URL.
+
+## Error responses
+
+Errors use the existing numeric `code` and human-readable `message` response fields. Documented codes and meanings are listed in [error-codes.md](error-codes.md). Throttled requests return HTTP 429.

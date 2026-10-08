@@ -152,6 +152,10 @@ class ReplacementLink(models.Model):
 
 # ------ BANK_DEPOSIT TABLE
 class BankDeposit(models.Model):
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('mobile_money', 'Mobile money'),
+    ]
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('processed', 'Processed'),
@@ -162,6 +166,9 @@ class BankDeposit(models.Model):
     control_number = models.ForeignKey(RFIDCard, on_delete=models.CASCADE, to_field='control_number')
     # student_or_ = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='cash')
+    provider = models.CharField(max_length=50, null=True, blank=True)
+    reference = models.CharField(max_length=100, null=True, blank=True)
     transaction_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     processed_at = models.DateTimeField(null=True, blank=True)
@@ -356,9 +363,14 @@ class Reconciliation(models.Model):
 
 # ------ PASSWORD RESET TOKEN TABLE ------
 class PasswordResetToken(models.Model):
+    PURPOSE_CHOICES = [
+        ('password_reset', 'Password reset'),
+        ('invite', 'Password invite'),
+    ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='password_reset_tokens')
     token_hash = models.CharField(max_length=128, unique=True)
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default='password_reset')
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

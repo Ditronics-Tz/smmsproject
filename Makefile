@@ -5,7 +5,7 @@
 # Docker containers for both development and production environments
 # ============================================================================
 
-.PHONY: help build build-dev build-prod up up-dev up-prod down logs shell migrate makemigrations collectstatic createsuperuser test clean prune
+.PHONY: help build build-dev build-prod up up-dev up-prod down logs shell migrate makemigrations collectstatic createsuperuser test clean prune schema
 
 # Colors for output
 GREEN := \033[0;32m
@@ -98,6 +98,9 @@ createsuperuser: ## Create Django superuser
 test: ## Run tests
 	@echo "$(GREEN)Running tests...$(NC)"
 	docker-compose exec web python manage.py test
+
+schema: ## Regenerate the committed OpenAPI schema
+	python manage.py spectacular --file docs/openapi.yaml
 
 check: ## Run Django system checks
 	docker-compose exec web python manage.py check

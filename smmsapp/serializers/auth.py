@@ -1,19 +1,11 @@
-import json
-import logging
-from uuid import UUID
 from rest_framework import serializers
-from django.core.mail import send_mail
 from ..models import CustomUser, School
 from django.db.models import Q
 from rest_framework import generics, status
 from rest_framework.response import Response
-import random
-import string
 from datetime import datetime
-from ..models import CustomUser, RFIDCard, Notification, ParentStudent
+from ..models import CustomUser, RFIDCard, ParentStudent
 from .resources import SchoolSerializer
-
-logger = logging.getLogger(__name__)
 
 # ----- USER SERIALIZER-----
 class AuthUserSerializer(serializers.ModelSerializer):
@@ -31,6 +23,15 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 class PasswordResetConfirmSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=200)
     new_password = serializers.CharField(write_only=True, min_length=8)
+
+
+class ResendInviteSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField()
+
+
+class ResendInviteResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    invite_link = serializers.URLField(required=False)
 
 
 #  ----- LOGIN SERIALIZER ----- 
@@ -73,25 +74,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'first_name','middle_name', 'last_name', 'username', 'email', 'mobile_number', 'role', 
                   'school','class_room', 'gender', 'password','profile_picture','parent_type',
-                  'parent_ids', 'student_ids']
+                  'parent_ids', 'student_ids', 'password_set']
+        read_only_fields = ['id', 'password_set']
 
-    # Generate strong password
-    def generate_password(self, last_name):
-        """Generate a strong random password."""
-        digits = string.digits
-        special_chars = "!@#$%&*"  # Limit special characters
-
-        password = [
-            random.choice(digits),
-            random.choice(special_chars)
-        ]
-
-        all_chars = digits + special_chars
-        password += random.choices(all_chars, k=1)  # Ensure 8-character length
-        random.shuffle(password)
-
-        return f'{last_name}{"".join(password)}'
-
+    password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
     # Generate unique username for student
     def generate_username(self, first_name, last_name, school_name):
         """Generate a unique username using first_name.last_name + 3 random digits"""
@@ -124,7 +110,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
             validated_data['username'] = username
 
             user = CustomUser.objects.create(role=role, **validated_data)
-            user.save()
+            user.set_unusable_password()
+            user.save(update_fields=['password'])
 
             # If `parent_id` is provided, link parent to student
             for parent_id in parent_ids:
@@ -135,13 +122,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"code": 107, "message": "Invalid parent ID"})
             
         else:
-            last_name = validated_data.get('last_name', '').strip()
-            password = self.generate_password(last_name)
-            validated_data['password'] = password # password
-
+            validated_data.pop('password', None)
             user = CustomUser.objects.create(role=role, **validated_data)
-            user.set_password(password)  # ✅ Hash password
-            user.save()
+            user.set_unusable_password()
+            user.save(update_fields=['password'])
 
             # If `student_id` is provided, link student to parent
             for student_id in student_ids:
@@ -151,37 +135,6 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 except CustomUser.DoesNotExist:
                     raise serializers.ValidationError({"code": 107, "message": "Invalid student ID"})
 
-            title = f"Login Credentials"
-            # Deliver credentials to the user's inbox. The plaintext password is not
-            # stored in a Notification row (security hardening).
-            if user.email:
-                try:
-                    send_mail(
-                        subject="Your SMMS Account Credentials",
-                        message=(
-                            f"Hello {user.first_name},\n\n"
-                            f"Your account was created successfully. Use the following to log in:\n"
-                            f"Username: {user.username}\n"
-                            f"Password: {password}\n\n"
-                            f"Please change your password after your first log in.\n\n"
-                            f"Thank you,\nSMMS Application"
-                        ),
-                        from_email=None,
-                        recipient_list=[user.email],
-                        fail_silently=False,
-                    )
-                    # Only claim "sent to email" if send_mail did not raise
-                    message = f"Hello {user.first_name}, your account was created successfully. Credentials were sent to your email."
-                    Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
-                except Exception as e:
-                    logger.exception("Failed to send credentials email to %s", user.email)
-                    # Email delivery failed — create notification without claiming email delivery
-                    message = f"Hello {user.first_name}, your account was created successfully. Your credentials are available in the application."
-                    Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
-            else:
-                # No email on file — create notification without claiming email delivery
-                message = f"Hello {user.first_name}, your account was created successfully. Your credentials are available in the application."
-                Notification.objects.create(recipient=user, title=title, type='reminder', message=message)
         return user
 
     # Edit user
@@ -225,3 +178,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 
 
+class CreateUserResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    user = UserCreateSerializer()
+    invite_link = serializers.URLField(required=False)

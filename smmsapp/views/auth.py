@@ -1,10 +1,13 @@
 from django.contrib.auth import authenticate
+from django.conf import settings
 from django.core.mail import send_mail
+from django.views.generic import TemplateView
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from django.db.models import Q
 import random
 import string
@@ -19,10 +22,13 @@ from ..serializers.resources import (
 from ..serializers.system import CodeMessageSerializer, ErrorSerializer, MessageSerializer
 from django.utils import timezone
 from ..serializers.auth import (
-    UserCreateSerializer, AuthUserSerializer, LoginSerializer,
+    UserCreateSerializer, CreateUserResponseSerializer, ResendInviteResponseSerializer,
+    AuthUserSerializer, LoginSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
+    ResendInviteSerializer,
 )
 from ..models import CustomUser as User, RFIDCard, Notification, PasswordResetToken
+from ..services.sms import get_sms_provider, normalize_tz_phone
 from ..permissions.roles import IsAdminOnly, IsAdminOrParent
 from ..services.audit import log_action, snapshot
 
@@ -93,7 +99,7 @@ class LogoutView(APIView):
 
 
 # User Creations API
-@extend_schema(tags=['auth'], request=UserCreateSerializer)
+@extend_schema(tags=['auth'], request=UserCreateSerializer, responses={201: CreateUserResponseSerializer})
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
@@ -124,15 +130,22 @@ class CreateUserView(generics.CreateAPIView):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             user = serializer.save()  # This triggers the control number generation for students
+            invite_link = _create_invite(user)
+            if user.email or user.mobile_number:
+                try:
+                    _deliver_invite(user, invite_link)
+                except Exception:
+                    logger.warning('Failed to deliver password invite for user %s', user.pk)
+                invite_link = None
             try:
                 log_action('create', obj=user, after=snapshot(user))
             except Exception:
                 pass
 
-            return Response({
-                    "message": f"{user.role} created successfully", "user": serializer.data}
-                    ,status=status.HTTP_201_CREATED
-                )
+            payload = {"message": f"{user.role} created successfully", "user": serializer.data}
+            if invite_link:
+                payload['invite_link'] = invite_link
+            return Response(payload, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
 
@@ -256,12 +269,15 @@ class ForgetPasswordView(APIView):
 
         if user is not None and user.email:
             # Invalidate any prior unused tokens for this user so only one is live.
-            PasswordResetToken.objects.filter(user=user, used_at__isnull=True).delete()
+            PasswordResetToken.objects.filter(
+                user=user, purpose='password_reset', used_at__isnull=True,
+            ).delete()
 
             raw_token = secrets.token_urlsafe(32)
             PasswordResetToken.objects.create(
                 user=user,
                 token_hash=self._hash_token(raw_token),
+                purpose='password_reset',
                 expires_at=timezone.now() + self.RESET_LINK_TTL,
             )
 
@@ -349,7 +365,9 @@ class ConfirmPasswordResetView(APIView):
         # Mark used and invalidate any other outstanding tokens for this user.
         reset.used_at = timezone.now()
         reset.save(update_fields=['used_at'])
-        PasswordResetToken.objects.filter(user=user, used_at__isnull=True).delete()
+        PasswordResetToken.objects.filter(
+            user=user, purpose=reset.purpose, used_at__isnull=True,
+        ).delete()
 
         Notification.objects.create(
             recipient=user,
@@ -387,3 +405,76 @@ class ChangePasswordView(APIView):
 
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
+
+
+def _create_invite(user):
+    """Create a one-time password-setting token; only the hash is persisted."""
+    PasswordResetToken.objects.filter(user=user, purpose='invite', used_at__isnull=True).delete()
+    raw_token = secrets.token_urlsafe(32)
+    PasswordResetToken.objects.create(
+        user=user,
+        token_hash=hashlib.sha256(raw_token.encode('utf-8')).hexdigest(),
+        purpose='invite',
+        expires_at=timezone.now() + timedelta(minutes=30),
+    )
+    return f"{settings.API_BASE_URL.rstrip('/')}/auth/accept-invite#token={raw_token}"
+
+
+class AcceptInvitePageView(TemplateView):
+    """Small password-setting page; the token stays in the browser URL fragment."""
+    template_name = 'password_invite.html'
+
+
+def _deliver_invite(user, invite_link):
+    """Deliver a token without persisting it to Notification, AuditLog, or SMSLog."""
+    message = (
+        f"Hello {user.first_name}, set your SMMS password using this one-time link: "
+        f"{invite_link}"
+    )
+    if user.email:
+        send_mail(
+            subject="Set Your SMMS Password",
+            message=message,
+            from_email=None,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    elif user.mobile_number:
+        provider = get_sms_provider()
+        provider.send(normalize_tz_phone(user.mobile_number), message)
+
+
+@extend_schema(tags=['auth'], request=ResendInviteSerializer,
+    responses={200: ResendInviteResponseSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
+class ResendInviteView(APIView):
+    permission_classes = [IsAdminOnly]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'resend_invite'
+
+    def post(self, request):
+        serializer = ResendInviteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'code': 400, 'message': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(id=serializer.validated_data['user_id'])
+        except User.DoesNotExist:
+            return Response({'code': 107, 'message': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_unusable_password()
+        user.save(update_fields=['password'])
+        invite_link = _create_invite(user)
+        if user.email or user.mobile_number:
+            try:
+                _deliver_invite(user, invite_link)
+            except Exception:
+                logger.warning('Failed to deliver password invite for user %s', user.pk)
+            response_data = {'message': 'A new password invite was issued.'}
+        else:
+            response_data = {
+                'message': 'A new password invite was issued.',
+                'invite_link': invite_link,
+            }
+
+        # Never put the raw invite link in audit details or model snapshots.
+        log_action('update', obj=user, after={'password_set': user.has_usable_password()})
+        return Response(response_data, status=status.HTTP_200_OK)

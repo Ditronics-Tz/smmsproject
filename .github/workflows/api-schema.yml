@@ -1,0 +1,25 @@
+name: API schema
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-schema-generation-key
+      DB_PASSWORD: ci-schema-generation-password
+      DB_HOST: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Regenerate and compare OpenAPI schema
+        run: |
+          git ls-files --error-unmatch docs/openapi.yaml
+          make schema
+          git diff --exit-code -- docs/openapi.yaml

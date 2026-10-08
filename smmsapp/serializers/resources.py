@@ -71,9 +71,10 @@ class SchoolSerializer(serializers.ModelSerializer):
 # ----- USER INFO ----
 class UserSerializer(serializers.ModelSerializer):
     school = serializers.CharField(source='school.name',read_only=True)
+    password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
     class Meta: 
         model = CustomUser
-        fields = ['id','first_name','middle_name','is_active','role', 'last_name','username','parent_type','gender','email','mobile_number','class_room','school','profile_picture','date_joined']
+        fields = ['id','first_name','middle_name','is_active','role', 'last_name','username','parent_type','gender','email','mobile_number','class_room','school','profile_picture','date_joined','password_set']
 
 
 # ------ STUDENT INFO ----
@@ -150,11 +151,12 @@ class FullStudentSerializer(serializers.ModelSerializer):
     school_id = serializers.CharField(source='school.id', read_only=True)
     parents = serializers.SerializerMethodField()
     transactions = serializers.SerializerMethodField()
+    password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
 
     class Meta:
         model = CustomUser
         fields = ['id','first_name','middle_name',  'last_name','gender', 'class_room',
-                  'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents']
+                  'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents', 'password_set']
 
     @extend_schema_field(RFIDCardSerializer(allow_null=True))
     def get_rfid_card(self, obj):
@@ -178,11 +180,12 @@ class FullStaffSerializer(serializers.ModelSerializer):
     school = serializers.CharField(source='school.name',read_only=True)
     school_id = serializers.CharField(source='school.id', read_only=True)
     transactions = serializers.SerializerMethodField()
+    password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
 
     class Meta:
         model = CustomUser
         fields = ['id','first_name','middle_name', 'last_name','gender', 'email', 'username', 'mobile_number',
-                  'school', 'school_id','profile_picture', 'rfid_card', 'transactions', ]
+                  'school', 'school_id','profile_picture', 'rfid_card', 'transactions', 'password_set']
         
     @extend_schema_field(RFIDCardSerializer(allow_null=True))
     def get_rfid_card(self, obj):
@@ -199,11 +202,12 @@ class FullStaffSerializer(serializers.ModelSerializer):
 class FullParentSerializer(serializers.ModelSerializer):
     students = serializers.SerializerMethodField()
     school = serializers.CharField(source='school.name',read_only=True)
+    password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
 
     class Meta:
         model = CustomUser
         fields = ['id','first_name', 'username','middle_name',  'last_name', 'parent_type','email', 'mobile_number','gender',
-                  'school', 'students']
+                  'school', 'students', 'password_set']
         
     @extend_schema_field(StudentSerializer(many=True))
     def get_students(self, obj):
@@ -216,11 +220,12 @@ class FullOperatorSerializer(serializers.ModelSerializer):
     sessions = serializers.SerializerMethodField()
     school = serializers.CharField(source='school.name',read_only=True)
     school_id = serializers.CharField(source='school.id', read_only=True)
+    password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
 
     class Meta:
         model = CustomUser
         fields = ['id','first_name','middle_name', 'last_name','username','email', 'mobile_number','gender',
-                  'school', 'sessions','school_id']
+                  'school', 'sessions','school_id', 'password_set']
         
     @extend_schema_field(ScanSessionSerializer(many=True))
     def get_sessions(self, obj):
@@ -231,11 +236,12 @@ class FullOperatorSerializer(serializers.ModelSerializer):
 class FullAdminSerializer(serializers.ModelSerializer):
     school = serializers.CharField(source='school.name', read_only=True)
     school_id = serializers.CharField(source='school.id', read_only=True)
+    password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
 
     class Meta:
         model = CustomUser
         fields = ['id','first_name','middle_name',  'last_name','username','email', 'mobile_number','gender',
-                  'school','school_id']
+                  'school','school_id','password_set']
 
 
 # ----- CREATE RFID CARD -----

@@ -1,11 +1,13 @@
+from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.cache import cache
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from ..models import Notification, School
-from ..serializers.resources import NotificationSerializer
+from ..models import AuditLog, Notification, PasswordResetToken, School, SMSLog
+from ..serializers.resources import NotificationSerializer, UserSerializer
 
 User = get_user_model()
 
@@ -61,7 +63,7 @@ class PasswordNotificationSecurityTests(TestCase):
         self.assertIn("Reset token:", email_body)
         self.assertIn(self.parent.first_name, email_body)
 
-    def test_create_non_student_stores_sanitized_notification(self):
+    def test_create_user_sends_invite_without_persisting_token(self):
         self.api.force_authenticate(user=self.admin)
         payload = {
             "role": "operator",
@@ -75,17 +77,82 @@ class PasswordNotificationSecurityTests(TestCase):
         self.assertEqual(response.status_code, 201)
 
         user = User.objects.get(username="opa1")
-        notification = Notification.objects.filter(recipient=user, title="Login Credentials").latest("id")
-        # Sanitized message — no plaintext password stored.
-        self.assertEqual(
-            notification.message,
-            f"Hello Opa, your account was created successfully. Credentials were sent to your email.",
-        )
-        self.assertNotIn(user.password, notification.message)
-
-        # A credentials email was dispatched with the plaintext password.
+        self.assertFalse(user.has_usable_password())
+        self.assertNotIn("invite_link", response.json())
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Username: opa1", mail.outbox[0].body)
+        self.assertIn("one-time link", mail.outbox[0].body)
+        self.assertNotIn("Password:", mail.outbox[0].body)
+        raw_token = mail.outbox[0].body.split("token=")[-1].split()[0]
+        token_row = PasswordResetToken.objects.get(user=user)
+        self.assertNotEqual(token_row.token_hash, raw_token)
+        self.assertNotIn(raw_token, str(list(AuditLog.objects.values("before", "after"))))
+        self.assertNotIn(raw_token, str(list(Notification.objects.values_list("message", flat=True))))
+        self.assertNotIn(raw_token, str(list(SMSLog.objects.values_list("body", flat=True))))
+
+    def test_create_user_without_contact_returns_invite_once(self):
+        self.api.force_authenticate(user=self.admin)
+        response = self.api.post("/auth/create-user", {
+            "role": "operator", "first_name": "Nia", "last_name": "NoContact",
+            "username": "nia1", "school": str(self.school.id),
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("invite_link", response.json())
+        link = response.json()["invite_link"]
+        token = link.split("token=")[-1]
+        self.assertNotIn(token, str(list(AuditLog.objects.values("before", "after"))))
+        self.assertNotIn(token, str(list(Notification.objects.values_list("message", flat=True))))
+
+    def test_invite_link_opens_password_setting_page(self):
+        response = self.api.get("/auth/accept-invite")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Set your SMMS password")
+
+    def test_resend_invite_invalidates_previous_token_and_requires_admin(self):
+        user = User.objects.create_user(
+            username="invitee", password=None, role="operator", first_name="Invited",
+            school=self.school,
+        )
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        old = PasswordResetToken.objects.create(
+            user=user,
+            token_hash="old-invite-hash",
+            purpose="invite",
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+
+        self.api.force_authenticate(user=self.parent)
+        denied = self.api.post("/auth/resend-invite", {"user_id": str(user.id)}, format="json")
+        self.assertEqual(denied.status_code, 403)
+
+        self.api.force_authenticate(user=self.admin)
+        response = self.api.post("/auth/resend-invite", {"user_id": str(user.id)}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("invite_link", response.json())
+        self.assertFalse(PasswordResetToken.objects.filter(pk=old.pk).exists())
+        self.assertEqual(PasswordResetToken.objects.filter(user=user, purpose="invite", used_at__isnull=True).count(), 1)
+        new_token = PasswordResetToken.objects.get(user=user, purpose="invite")
+        raw_token = response.json()["invite_link"].split("token=")[-1]
+        audit_details = str(list(AuditLog.objects.values("before", "after")))
+        self.assertNotIn(raw_token, audit_details)
+        self.assertNotIn(new_token.token_hash, audit_details)
+
+    def test_resend_invite_is_limited_to_five_per_minute_per_admin(self):
+        self.api.force_authenticate(user=self.admin)
+        user = User.objects.create_user(
+            username="invite-throttle", password=None, role="operator", school=self.school,
+        )
+        responses = [
+            self.api.post("/auth/resend-invite", {"user_id": str(user.id)}, format="json")
+            for _ in range(6)
+        ]
+        self.assertEqual([response.status_code for response in responses], [200] * 5 + [429])
+
+    def test_admin_user_serializer_exposes_read_only_password_state(self):
+        self.assertTrue(UserSerializer(self.parent).data["password_set"])
+        self.parent.set_unusable_password()
+        self.parent.save(update_fields=["password"])
+        self.assertFalse(UserSerializer(self.parent).data["password_set"])
 
     def test_serializer_redacts_password_bearing_message(self):
         """Defense-in-depth: the API never surfaces a password-looking message."""

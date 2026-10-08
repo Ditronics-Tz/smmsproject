@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from rest_framework.pagination import PageNumberPagination
+import re
 from ..models import (
     RFIDCard, BankDeposit, Transaction, LedgerEntry,
     ScanSession, Reconciliation, Reversal, CustomUser,
@@ -16,13 +17,25 @@ class BankDepositSerializer(serializers.ModelSerializer):
     submitted_by_name = serializers.CharField(
         source='submitted_by.get_full_name', read_only=True, allow_null=True
     )
+    phone_masked = serializers.SerializerMethodField()
+
+    def get_phone_masked(self, obj) -> str | None:
+        phone = obj.submitted_by.mobile_number if obj.submitted_by_id else None
+        if not phone:
+            return None
+        digits = re.sub(r'\D', '', phone)
+        if digits.startswith('0') and len(digits) == 10:
+            digits = '255' + digits[1:]
+        if len(digits) < 6:
+            return '***'
+        return f"+{digits[:3]} {digits[3:4]}** *** {digits[-3:]}"
 
     class Meta:
         model = BankDeposit
         fields = [
             'id', 'control_number', 'card_number', 'student_name', 'amount',
             'status', 'processed_at', 'submitted_by', 'submitted_by_name',
-            'created_at',
+            'payment_method', 'provider', 'reference', 'phone_masked', 'created_at',
         ]
         read_only_fields = ['id', 'control_number', 'created_at', 'processed_at']
 
@@ -36,6 +49,19 @@ class ProcessDepositSerializer(serializers.Serializer):
 class CreateDepositSerializer(serializers.Serializer):
     card_number = serializers.CharField()
     amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = serializers.ChoiceField(choices=['cash', 'mobile_money'], default='cash')
+    provider = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    reference = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    def validate(self, attrs):
+        method = attrs['payment_method']
+        provider = attrs.get('provider')
+        if method == 'cash' and provider:
+            raise serializers.ValidationError({'provider': 'Provider must be null for cash deposits.'})
+        if method == 'mobile_money' and not provider:
+            raise serializers.ValidationError({'provider': 'Provider is required for mobile money deposits.'})
+        attrs['provider'] = provider or None
+        return attrs
 
 
 class LedgerEntrySerializer(serializers.ModelSerializer):
