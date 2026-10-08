@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import os
+import json
 from dotenv import load_dotenv
 from datetime import timedelta
 from django.core.exceptions import ImproperlyConfigured
@@ -130,6 +131,23 @@ CELERY_BEAT_SCHEDULE = {
 
 # Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
 DEFAULT_BALANCE_THRESHOLD = '1000.00'
+
+try:
+    FEATURES_DEFAULT = json.loads(os.getenv('FEATURES_DEFAULT', '{}'))
+except json.JSONDecodeError as exc:
+    raise ImproperlyConfigured('FEATURES_DEFAULT must be valid JSON') from exc
+if not isinstance(FEATURES_DEFAULT, dict) or any(
+    not isinstance(key, str) or not isinstance(value, bool)
+    for key, value in FEATURES_DEFAULT.items()
+):
+    raise ImproperlyConfigured('FEATURES_DEFAULT must be a JSON object of boolean values')
+
+APP_NAME = os.getenv('APP_NAME', 'Student Meal Management System')
+SHORT_NAME = os.getenv('APP_SHORT_NAME', 'SMMS')
+CURRENCY_CODE = os.getenv('CURRENCY_CODE', 'TZS')
+CURRENCY_SYMBOL = os.getenv('CURRENCY_SYMBOL', 'TSh')
+CURRENCY_DECIMALS = int(os.getenv('CURRENCY_DECIMALS', '2'))
+APP_LOCALE = os.getenv('APP_LOCALE', 'en-TZ')
 
 
 # Application definition

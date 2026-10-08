@@ -361,6 +361,23 @@ class Reconciliation(models.Model):
         return f"Reconciliation {self.session.id}: scanned={self.scanned_value} expected={self.expected_cash} variance={self.variance} {self.status}"
 
 
+class FeatureFlag(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    enabled = models.BooleanField(default=False)
+    description = models.TextField(blank=True)
+    updated_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='updated_feature_flags',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['key']
+
+    def __str__(self):
+        return f"{self.key}: {'enabled' if self.enabled else 'disabled'}"
+
+
 # ------ PASSWORD RESET TOKEN TABLE ------
 class PasswordResetToken(models.Model):
     PURPOSE_CHOICES = [

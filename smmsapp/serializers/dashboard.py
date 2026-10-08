@@ -75,3 +75,8 @@ class LastSessionDetailsSerializer(serializers.Serializer):
     end_time = serializers.DateTimeField(allow_null=True)
     total_price = serializers.DecimalField(max_digits=12, decimal_places=2)
     student_count = serializers.IntegerField()
+    scanned_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    penalty_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    expected_cash = serializers.DecimalField(max_digits=12, decimal_places=2)
+    variance = serializers.DecimalField(max_digits=12, decimal_places=2)
+    status = serializers.CharField()

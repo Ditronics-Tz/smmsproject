@@ -2,6 +2,7 @@
 from django.urls import path, include
 
 urlpatterns = [
+    path('config/', include('smmsapp.urls.config')),
     path('auth/', include('smmsapp.urls.auth')),
     path('dashboard/', include('smmsapp.urls.dashboard')),
     path('resources/', include('smmsapp.urls.resources')),

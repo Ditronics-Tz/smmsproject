@@ -30,3 +30,15 @@ The invite link opens `/auth/accept-invite` with its one-time token in the URL f
 ## Error responses
 
 Errors use the existing numeric `code` and human-readable `message` response fields. Documented codes and meanings are listed in [error-codes.md](error-codes.md). Throttled requests return HTTP 429.
+
+## Session close summary
+
+`POST /api/v1/sessions/end-session` returns exactly these fields: `scanned_value`, `penalty_value`, `expected_cash`, `variance`, and `status`. `scanned_value` sums successful, non-voided meal scans and excludes penalty and reversed scans. `penalty_value` sums only the penalty charge (the transaction amount less the meal price) for non-voided penalty scans. `variance` is `expected_cash - scanned_value`; `status` is `matched` or `variance`.
+
+Session list responses and the operator's `/api/v1/dashboard/last-session` detail also carry these summary values. The session list's `status` is the reconciliation status; `session_status` retains the lifecycle state (`active`, `completed`, or `cancelled`).
+
+## Deployment config and feature flags
+
+`GET /api/v1/config/public` is unauthenticated and returns branding, currency, and locale only. It never returns secrets or feature flag values.
+
+`FEATURES_DEFAULT` is a JSON object of supported feature keys to boolean deployment defaults. Missing database rows fall back to the environment value (or false). `GET /api/v1/config/features` requires authentication and returns `{ "features": { "KEY": true } }`. `PUT /api/v1/config/features/{key}` is superuser-only, accepts `{ "enabled": boolean }`, and returns the updated flag. Unknown keys return 404. Feature values are cached for up to 60 seconds and model updates invalidate the cache.

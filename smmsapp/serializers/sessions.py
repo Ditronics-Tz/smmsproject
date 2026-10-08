@@ -2,14 +2,43 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from decimal import Decimal
 from ..models import ScanSession,ScannedData, RFIDCard, CanteenItem, Transaction
+from ..services.session_summary import session_summary
 from .resources import TransactionSerializer as _TransactionSerializer
 
 # ---- SESSION SERIALIZER -----
 class ScanSessionSerializer(serializers.ModelSerializer):
+    session_status = serializers.CharField(source='status', read_only=True)
+    status = serializers.SerializerMethodField()
+    scanned_value = serializers.SerializerMethodField()
+    penalty_value = serializers.SerializerMethodField()
+    expected_cash = serializers.SerializerMethodField()
+    variance = serializers.SerializerMethodField()
+
     class Meta:
         model = ScanSession
-        fields = ['id', 'operator', 'type', 'status', 'start_at', 'end_at']
+        fields = ['id', 'operator', 'type', 'status', 'session_status', 'start_at', 'end_at',
+                  'scanned_value', 'penalty_value', 'expected_cash', 'variance']
         read_only_fields = ['id', 'start_at', 'end_at']
+
+    def _summary(self, obj):
+        if not hasattr(obj, '_contract_summary'):
+            obj._contract_summary = session_summary(obj)
+        return obj._contract_summary
+
+    def get_scanned_value(self, obj):
+        return self._summary(obj)['scanned_value']
+
+    def get_penalty_value(self, obj):
+        return self._summary(obj)['penalty_value']
+
+    def get_expected_cash(self, obj):
+        return self._summary(obj)['expected_cash']
+
+    def get_variance(self, obj):
+        return self._summary(obj)['variance']
+
+    def get_status(self, obj):
+        return self._summary(obj)['status']
 
 
 # ---- REQUEST BODIES FOR THE SESSION APIViews ----
@@ -55,8 +84,11 @@ class ReconciliationSummarySerializer(serializers.Serializer):
 
 
 class EndSessionResponseSerializer(serializers.Serializer):
-    session = ScanSessionSerializer()
-    reconciliation = ReconciliationSummarySerializer()
+    scanned_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    penalty_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    expected_cash = serializers.DecimalField(max_digits=12, decimal_places=2)
+    variance = serializers.DecimalField(max_digits=12, decimal_places=2)
+    status = serializers.CharField()
 
 
 # ----- SCANNED DATA SERIALIZER ----

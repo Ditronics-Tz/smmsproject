@@ -203,6 +203,9 @@ class LastSessionDetailsView(APIView):
         # Get all scanned data for the last session
         scanned_data = ScannedData.objects.filter(session=last_session)
 
+        from ..services.session_summary import session_summary
+        summary = session_summary(last_session)
+
         # Calculate total price of items in last session
         total_price = scanned_data.aggregate(Sum('item__price'))['item__price__sum'] or 0
 
@@ -216,7 +219,12 @@ class LastSessionDetailsView(APIView):
             "start_time": last_session.start_at,
             "end_time": last_session.end_at,
             "total_price": total_price,
-            "student_count": student_count
+            "student_count": student_count,
+            "scanned_value": summary['scanned_value'],
+            "penalty_value": summary['penalty_value'],
+            "expected_cash": summary['expected_cash'],
+            "variance": summary['variance'],
+            "status": summary['status'],
         }, status=status.HTTP_200_OK)
     
 

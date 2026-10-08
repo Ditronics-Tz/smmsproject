@@ -111,7 +111,8 @@ class ScanRFIDCardView(APIView):
                 rfid_card=rfid_card,
                 item=item,
                 amount=amount,
-                transaction_status=trans_status
+                transaction_status=trans_status,
+                session=session,
             )
 
             # Write ledger entry for the balance change
@@ -239,13 +240,10 @@ class EndScanSessionView(APIView):
 
             # ---- RECONCILIATION: compute scanned value, ask operator for expected cash ----
             from decimal import Decimal
-            from django.db.models import Sum, F
-            from ..models import ScannedData
+            from ..services.session_summary import session_summary
 
-            # Compute total value of all items scanned in this session
-            scanned_total = ScannedData.objects.filter(session=session).aggregate(
-                total=Sum(F('item__price'))
-            )['total'] or Decimal('0.00')
+            totals = session_summary(session)
+            scanned_total = totals['scanned_value']
 
             # Read expected cash from request (operator inputs actual till amount)
             expected_cash = Decimal(request.data.get('expected_cash', '0.00') or '0.00')
@@ -276,17 +274,13 @@ class EndScanSessionView(APIView):
             session.end_at = timezone.now()
             session.save()
 
-            serializer = ScanSessionSerializer(session)
+            totals = session_summary(session)
             return Response({
-                'session': serializer.data,
-                'reconciliation': {
-                    'id': str(reconciliation.id),
-                    'scanned_value': str(reconciliation.scanned_value),
-                    'expected_cash': str(reconciliation.expected_cash),
-                    'variance': str(reconciliation.variance),
-                    'status': reconciliation.status,
-                    'reason': reconciliation.reason,
-                }
+                'scanned_value': str(totals['scanned_value']),
+                'penalty_value': str(totals['penalty_value']),
+                'expected_cash': str(totals['expected_cash']),
+                'variance': str(totals['variance']),
+                'status': totals['status'],
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"},status=status.HTTP_400_BAD_REQUEST)
@@ -396,4 +390,3 @@ class TransactionListView(APIView, PageNumberPagination):
         # If fail return all data/fields
         serializer = TransactionSerializer(transactions, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
