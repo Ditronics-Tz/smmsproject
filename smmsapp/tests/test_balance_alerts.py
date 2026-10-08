@@ -15,6 +15,7 @@ User = get_user_model()
 @override_settings(
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
     DEFAULT_BALANCE_THRESHOLD="1000.00",
+    FEATURES_DEFAULT={'PARENT_LIMITS': True},
 )
 class AlertBase(TestCase):
     @classmethod

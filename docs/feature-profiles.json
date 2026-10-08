@@ -1,0 +1,14 @@
+{
+  "basic": {
+    "description": "Core canteen operations with menu and deposits; optional modules stay off.",
+    "enabled": ["MENU", "PAYMENTS"]
+  },
+  "standard": {
+    "description": "Basic operations plus analytics, insights, ledger, and parent balance limits.",
+    "enabled": ["ANALYTICS", "INSIGHTS", "LEDGER_UI", "MENU", "PAYMENTS", "PARENT_LIMITS"]
+  },
+  "full": {
+    "description": "All available modules, including features whose APIs may be enabled in a later release.",
+    "enabled": ["ANALYTICS", "INSIGHTS", "LEDGER_UI", "PAYMENTS", "MENU", "PREORDERS", "SPONSORSHIP", "INTEGRATIONS", "STOCK", "PARENT_LIMITS", "NFC_SCAN"]
+  }
+}

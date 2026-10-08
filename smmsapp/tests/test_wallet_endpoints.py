@@ -8,7 +8,7 @@ omitted field (SkipField) or a 500, so nothing caught it.
 """
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 
@@ -19,6 +19,7 @@ from ..models import (
 User = get_user_model()
 
 
+@override_settings(FEATURES_DEFAULT={'PAYMENTS': True, 'LEDGER_UI': True})
 class WalletEndpointRegressionTests(TestCase):
     @classmethod
     def setUpTestData(cls):

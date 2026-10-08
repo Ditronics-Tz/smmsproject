@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
 from ..permissions.roles import IsAdminOrParent
+from ..permissions.features import FeatureEnabled
 from ..serializers.alerts import BalanceThresholdSerializer
 from ..serializers.system import CodeMessageSerializer
 from ..services.audit import log_action, snapshot
@@ -21,7 +22,7 @@ class BalanceThresholdView(APIView):
     GET returns the effective threshold (explicit value or system default).
     PUT accepts balance_threshold (decimal) or null to reset to the default.
     """
-    permission_classes = [IsAdminOrParent]
+    permission_classes = [IsAdminOrParent, FeatureEnabled('PARENT_LIMITS')]
 
     def _enforce_parent(self, request):
         if request.user.role != 'parent':

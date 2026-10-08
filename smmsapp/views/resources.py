@@ -15,6 +15,7 @@ from ..serializers import *
 from ..serializers.system import CodeMessageSerializer
 from ..models import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly
+from ..permissions.features import FeatureEnabled
 
 # ----- API FOR GET SCHOOL -----
 @extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=SchoolSerializer(many=True))
@@ -295,7 +296,7 @@ class AdminDetailsView(generics.RetrieveAPIView):
 # ----- API FOR FETCH ITEM LIST -----
 @extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=CanteenItemSerializer(many=True))
 class ItemListView(APIView, PageNumberPagination):
-    permission_classes = [IsAdminOnly]
+    permission_classes = [IsAdminOnly, FeatureEnabled('MENU')]
     page_size = 50
 
     def post(self, request, *args, **kwargs):
@@ -321,7 +322,7 @@ class ItemListView(APIView, PageNumberPagination):
 # ---- API FOR DELETE ITEM -----
 @extend_schema(tags=['resources'], request=ItemIdRequestSerializer, responses=CodeMessageSerializer)
 class DeleteItemView(APIView):
-    permission_classes = [IsAdminOnly]
+    permission_classes = [IsAdminOnly, FeatureEnabled('MENU')]
     def post(self, request, *args, **kwargs):
         try:
             item_id = request.data.get("item_id")
@@ -385,14 +386,14 @@ class DeleteItemView(APIView):
 class CreateItemView(generics.CreateAPIView):
     queryset = CanteenItem.objects.all()
     serializer_class = CanteenItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FeatureEnabled('MENU')]
 
 
 # ----- API EDIT ITEM -----
 class EditItemView(generics.UpdateAPIView):
     queryset = CanteenItem.objects.all()
     serializer_class = CanteenItemSerializer
-    permission_classes = [IsAdminOnly]
+    permission_classes = [IsAdminOnly, FeatureEnabled('MENU')]
 
     def post(self, request, *args, **kwargs):
         # Only Admins can update any user

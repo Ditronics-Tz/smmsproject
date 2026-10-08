@@ -59,6 +59,7 @@ def _scan_worker(payload, operator, barrier, results):
 @override_settings(
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    FEATURES_DEFAULT={'MENU': True},
 )
 class IntegrityBase(TestCase):
     @classmethod

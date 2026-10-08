@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from ..serializers import *
 from ..models import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly
+from ..permissions.features import FeatureEnabled
 
 # --- api to return all active parent
 class AllParentListView(generics.ListAPIView):
@@ -50,5 +51,5 @@ class AllSchoooListView(generics.ListAPIView):
 class AllCanteenItemView(generics.ListAPIView):
     queryset = CanteenItem.objects.all()
     serializer_class = CanteenItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FeatureEnabled('MENU')]
     page_size = None

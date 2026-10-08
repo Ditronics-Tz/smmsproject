@@ -42,3 +42,20 @@ Session list responses and the operator's `/api/v1/dashboard/last-session` detai
 `GET /api/v1/config/public` is unauthenticated and returns branding, currency, and locale only. It never returns secrets or feature flag values.
 
 `FEATURES_DEFAULT` is a JSON object of supported feature keys to boolean deployment defaults. Missing database rows fall back to the environment value (or false). `GET /api/v1/config/features` requires authentication and returns `{ "features": { "KEY": true } }`. `PUT /api/v1/config/features/{key}` is superuser-only, accepts `{ "enabled": boolean }`, and returns the updated flag. Unknown keys return 404. Feature values are cached for up to 60 seconds and model updates invalidate the cache.
+
+## Backend feature enforcement
+
+Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the database override (or environment default) is off. Current gates are:
+
+- `ANALYTICS`: dashboard counts, sales summary/trend, and end-of-day report.
+- `LEDGER_UI`: card ledger reads.
+- `PAYMENTS`: deposit create/list/process and transaction reversal.
+- `MENU`: canteen item list/create/edit/delete endpoints, including `/list/canteen-items`.
+- `PARENT_LIMITS`: parent balance-threshold API and its scheduled low-balance sweep.
+- `NFC_SCAN`: scan requests that supply `card_uid`. Existing RFID requests using `card_number` remain available regardless of this flag. The current card model has no separate UID field; enabled NFC requests resolve the supplied UID through the existing card-number lookup until a dedicated NFC integration is added.
+
+The current backend has no preorder, sponsorship, integration, stock, or insights endpoints. Their flags are available to clients/configuration and are included in profiles, but there is no corresponding route to gate yet. There are no `build_insights` or `build_daily_stats` tasks in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
+
+## Customer feature profiles
+
+When provisioning a customer deployment, set its `FEATURES_DEFAULT` environment JSON, run migrations, then apply a starting profile with `python manage.py apply_feature_profile basic|standard|full`. Profiles live in `docs/feature-profiles.json`; applying one sets every supported flag, overriding the environment defaults in the database. Use `basic` for menu and deposit operations, `standard` for analytics/ledger/parent limits, and `full` to enable all listed modules. Review the profile against the customer's plan before applying it; individual overrides can subsequently be changed with `python manage.py set_feature KEY --on` or `--off`. Use `python manage.py list_features` to review effective values and defaults.

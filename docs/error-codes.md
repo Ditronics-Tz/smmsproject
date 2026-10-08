@@ -14,4 +14,5 @@ Error responses use a numeric `code` and a human-readable `message`.
 | 122 | The mobile number is already in use. | 400 |
 | 123 | The email address is already in use. | 400 |
 | 124 | The password reset or invite token is invalid, expired, or already used. | 400 |
+| `FEATURE_DISABLED` | The requested optional feature is disabled for this deployment. | 403 |
 | 429 | The request was throttled. Retry after the indicated interval. | 429 |

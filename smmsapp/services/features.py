@@ -1,4 +1,7 @@
 """Database-overridable, short-lived feature flag lookup."""
+import hashlib
+import json
+
 from django.conf import settings
 from django.core.cache import cache
 
@@ -6,8 +9,16 @@ _CACHE_KEY = 'smmsapp:feature-flags:v1'
 _CACHE_TIMEOUT = 60
 
 
+def _cache_key():
+    defaults = getattr(settings, 'FEATURES_DEFAULT', {})
+    fingerprint = hashlib.sha256(
+        json.dumps(defaults, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    ).hexdigest()[:12]
+    return f'{_CACHE_KEY}:{fingerprint}'
+
+
 def clear_feature_cache(*args, **kwargs):
-    cache.delete(_CACHE_KEY)
+    cache.delete(_cache_key())
 
 
 def all_flags():
@@ -27,8 +38,9 @@ def is_enabled(key):
     if key not in defaults:
         raise KeyError(key)
 
-    flags = cache.get(_CACHE_KEY)
+    key = _cache_key()
+    flags = cache.get(key)
     if flags is None:
         flags = all_flags()
-        cache.set(_CACHE_KEY, flags, _CACHE_TIMEOUT)
+        cache.set(key, flags, _CACHE_TIMEOUT)
     return flags[key]

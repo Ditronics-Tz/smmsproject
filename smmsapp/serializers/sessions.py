@@ -45,6 +45,7 @@ class ScanSessionSerializer(serializers.ModelSerializer):
 class ScanRFIDRequestSerializer(serializers.Serializer):
     session_id = serializers.UUIDField(required=False, allow_null=True)
     card_number = serializers.CharField(required=False, allow_blank=True)
+    card_uid = serializers.CharField(required=False, allow_blank=True)
     item_id = serializers.UUIDField(required=False, allow_null=True)
 
 

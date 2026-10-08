@@ -16,6 +16,7 @@ from drf_spectacular.utils import extend_schema
 from ..serializers.system import CodeMessageSerializer
 from django.utils import timezone
 from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminOrParent, IsAdminOnly
+from ..permissions.features import FeatureEnabled
 from ..services.audit import log_action, snapshot
 from ..utils import get_admin_scope
 
@@ -24,7 +25,7 @@ from ..utils import get_admin_scope
 @extend_schema(tags=['sessions'], request=ScanRFIDRequestSerializer,
     responses={201: ScannedDataSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class ScanRFIDCardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, FeatureEnabled('NFC_SCAN')]
 
     def post(self, request):
         user = request.user
@@ -33,7 +34,7 @@ class ScanRFIDCardView(APIView):
             return Response({'code': 403, 'message': 'Only operators can scan cards'}, status=status.HTTP_403_FORBIDDEN)
 
         session_id = request.data.get('session_id')
-        card_number = request.data.get('card_number')
+        card_number = request.data.get('card_number') or request.data.get('card_uid')
         item_id = request.data.get('item_id')
 
         # Validate session

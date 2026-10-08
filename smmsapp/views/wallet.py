@@ -18,6 +18,7 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 from ..serializers.system import CodeMessageSerializer
 from ..serializers.resources import TransactionSerializer
 from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminOrParent, IsAdminOperatorOrParent
+from ..permissions.features import FeatureEnabled
 from ..services.audit import log_action, snapshot
 from ..serializers.wallet import (
     CreateDepositSerializer,
@@ -35,7 +36,7 @@ from ..serializers.wallet import (
     responses={201: BankDepositSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class CreateDepositView(APIView):
     """Parent submits a top-up deposit request for one of their children's cards."""
-    permission_classes = [IsAdminOrParent]
+    permission_classes = [IsAdminOrParent, FeatureEnabled('PAYMENTS')]
 
     def post(self, request):
         user = request.user
@@ -116,7 +117,7 @@ class DepositListView(generics.ListAPIView):
     """List deposits: parent sees own; admin/operator sees all."""
     serializer_class = BankDepositSerializer
     pagination_class = CardLedgerPagination
-    permission_classes = [IsAdminOperatorOrParent]
+    permission_classes = [IsAdminOperatorOrParent, FeatureEnabled('PAYMENTS')]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['payment_method', 'provider', 'status']
 
@@ -146,7 +147,7 @@ class ProcessDepositView(APIView):
     On approval: credits RFIDCard.balance atomically (select_for_update),
     writes LedgerEntry(event_type='deposit'), sets processed_at, notifies parent.
     """
-    permission_classes = [IsAdminOrOperator]
+    permission_classes = [IsAdminOrOperator, FeatureEnabled('PAYMENTS')]
 
     def post(self, request):
         serializer = ProcessDepositSerializer(data=request.data)
@@ -251,7 +252,7 @@ class CardLedgerView(generics.ListAPIView):
     """
     serializer_class = CardLedgerViewSerializer
     pagination_class = CardLedgerPagination
-    permission_classes = [IsAdminOrOperator]
+    permission_classes = [IsAdminOrOperator, FeatureEnabled('LEDGER_UI')]
 
     def get_queryset(self):
         card_identifier = self.request.query_params.get('card_number') or self.request.data.get('card_number')
@@ -272,7 +273,7 @@ class ReverseTransactionView(APIView):
     """Admin/operator voids a transaction, restoring the exact amount to the card balance.
     Idempotent: cannot be applied twice (transaction.is_voided guard + unique Reversal row).
     """
-    permission_classes = [IsAdminOrOperator]
+    permission_classes = [IsAdminOrOperator, FeatureEnabled('PAYMENTS')]
 
     def post(self, request):
         serializer = ReversalSerializer(data=request.data)

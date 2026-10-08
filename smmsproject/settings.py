@@ -132,15 +132,25 @@ CELERY_BEAT_SCHEDULE = {
 # Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
 DEFAULT_BALANCE_THRESHOLD = '1000.00'
 
+FEATURE_KEYS = (
+    'ANALYTICS', 'INSIGHTS', 'LEDGER_UI', 'PAYMENTS', 'MENU', 'PREORDERS',
+    'SPONSORSHIP', 'INTEGRATIONS', 'STOCK', 'PARENT_LIMITS', 'NFC_SCAN',
+)
 try:
-    FEATURES_DEFAULT = json.loads(os.getenv('FEATURES_DEFAULT', '{}'))
+    _features_from_env = json.loads(os.getenv('FEATURES_DEFAULT', '{}'))
 except json.JSONDecodeError as exc:
     raise ImproperlyConfigured('FEATURES_DEFAULT must be valid JSON') from exc
-if not isinstance(FEATURES_DEFAULT, dict) or any(
+if not isinstance(_features_from_env, dict) or any(
     not isinstance(key, str) or not isinstance(value, bool)
-    for key, value in FEATURES_DEFAULT.items()
+    for key, value in _features_from_env.items()
 ):
     raise ImproperlyConfigured('FEATURES_DEFAULT must be a JSON object of boolean values')
+unknown_feature_keys = set(_features_from_env) - set(FEATURE_KEYS)
+if unknown_feature_keys:
+    raise ImproperlyConfigured(
+        'Unknown FEATURES_DEFAULT key(s): ' + ', '.join(sorted(unknown_feature_keys))
+    )
+FEATURES_DEFAULT = {key: _features_from_env.get(key, False) for key in FEATURE_KEYS}
 
 APP_NAME = os.getenv('APP_NAME', 'Student Meal Management System')
 SHORT_NAME = os.getenv('APP_SHORT_NAME', 'SMMS')

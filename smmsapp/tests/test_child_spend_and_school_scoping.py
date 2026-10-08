@@ -13,6 +13,7 @@ User = get_user_model()
 
 @override_settings(
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
+    FEATURES_DEFAULT={'ANALYTICS': True},
 )
 class Base(TestCase):
     @classmethod

@@ -36,6 +36,7 @@ User = get_user_model()
 @override_settings(
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    FEATURES_DEFAULT={'ANALYTICS': True, 'MENU': True},
 )
 class Phase1RegressionBase(TestCase):
     """Shared fixtures for every Phase 1 regression test."""

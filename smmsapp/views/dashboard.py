@@ -12,6 +12,7 @@ from ..utils import generate_end_of_day_report, generate_parent_end_of_day_repor
 from ..models import ParentStudent, RFIDCard, Transaction, CustomUser, ScanSession, ScannedData, CanteenItem
 from ..serializers.dashboard import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly, IsOperator, IsAdminOrOperator
+from ..permissions.features import FeatureEnabled
 from ..serializers.system import CodeMessageSerializer
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiResponse
@@ -19,7 +20,7 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse
 #  ----- API FOR COUNTS IN DASHBOARD ------
 @extend_schema(tags=['dashboard'], request=None, responses=CountsSerializer)
 class CountsView(APIView):
-    permission_classes = [IsAdminOrOperator]
+    permission_classes = [IsAdminOrOperator, FeatureEnabled('ANALYTICS')]
 
     def post(self, request, *args, **kwargs):
         today = now().date()
@@ -82,7 +83,7 @@ class CountsView(APIView):
     tags=['dashboard'], request=SalesSummaryRequestSerializer,
     responses={200: SalesSummarySerializer, 400: CodeMessageSerializer})
 class SalesSummaryView(APIView):
-    permission_classes = [IsAdminOnly]
+    permission_classes = [IsAdminOnly, FeatureEnabled('ANALYTICS')]
 
     def post(self, request,  *args, **kwargs):
         filter_type = request.data.get('filter', 'day')  # Default is 'day'
@@ -124,7 +125,7 @@ class SalesSummaryView(APIView):
 # ----- API FOR WEEKLY SALES TRANS --------
 @extend_schema(tags=['dashboard'], request=None, responses=WeeklySalesSerializer(many=True))
 class WeeklySalesTrendView(APIView):
-    permission_classes = [IsAdminOnly]
+    permission_classes = [IsAdminOnly, FeatureEnabled('ANALYTICS')]
 
     def post(self, request,  *args, **kwargs):
         today = now().date()
@@ -162,7 +163,7 @@ class WeeklySalesTrendView(APIView):
 )
 class EndOfDayReportView(APIView):
     """Generate and download End-of-Day report"""
-    permission_classes = [IsAdminOrParent]  # Only Admins can access
+    permission_classes = [IsAdminOrParent, FeatureEnabled('ANALYTICS')]  # Only Admins can access
 
     def get(self, request):
         pdf_buffer = None

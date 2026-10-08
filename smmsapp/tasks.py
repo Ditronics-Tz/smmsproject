@@ -110,6 +110,10 @@ def send_pending_notifications():
 def check_balance_thresholds():
     """Periodic sweep: raise low-balance reminders for students whose active card
     balance is below their parent's threshold (once per day)."""
+    from .services.features import is_enabled
+    if not is_enabled('PARENT_LIMITS'):
+        logger.info('Skipping low-balance sweep: PARENT_LIMITS is disabled.')
+        return 'Skipped: PARENT_LIMITS is disabled.'
     from .services.alerts import sweep_low_balances
     created = sweep_low_balances()
     logger.info(f"Low-balance sweep complete. {created} reminder(s) created.")
