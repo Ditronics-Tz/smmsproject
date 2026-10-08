@@ -96,6 +96,7 @@ class CustomUser(AbstractUser):
 class RFIDCard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     card_number = models.CharField(max_length=50, unique=True)
+    uid_hex = models.CharField(max_length=20, unique=True, null=True, blank=True)
     student_or_staff = models.ForeignKey(
         CustomUser,
         on_delete=models.CASCADE,
@@ -253,6 +254,8 @@ class Transaction(models.Model):
         help_text='Scan session that produced this transaction (for audit & reversal)'
     )
     is_voided = models.BooleanField(default=False, db_index=True, help_text='Set when a reversal restores the balance')
+    SCAN_SOURCE_CHOICES = [('usb', 'USB'), ('nfc', 'NFC'), ('manual', 'Manual')]
+    scan_source = models.CharField(max_length=10, choices=SCAN_SOURCE_CHOICES, default='usb')
 
     def __str__(self):
         return f"{self.student_or_staff.username} - {self.item.name} - ${self.amount}"
@@ -294,9 +297,24 @@ class ScannedData(models.Model):
     rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
     item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE, null=True, blank=True)
     scanned_at = models.DateTimeField(auto_now_add=True)
+    SCAN_SOURCE_CHOICES = [('usb', 'USB'), ('nfc', 'NFC'), ('manual', 'Manual')]
+    scan_source = models.CharField(max_length=10, choices=SCAN_SOURCE_CHOICES, default='usb')
+    client_scan_id = models.UUIDField(null=True, blank=True, unique=True)
 
     def __str__(self):
         return f"{self.student_or_staff.username} scanned at {self.scanned_at}"
+
+
+class InsightFlag(models.Model):
+    """Persisted evidence for suspicious pairs of scans."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=40, default='impossible_scan')
+    scan_a = models.ForeignKey(ScannedData, on_delete=models.CASCADE, related_name='insight_flags_a')
+    scan_b = models.ForeignKey(ScannedData, on_delete=models.CASCADE, related_name='insight_flags_b')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['kind', 'scan_a', 'scan_b'], name='uniq_insight_scan_pair')]
 
 
 # ------ LEDGER ENTRY TABLE ------

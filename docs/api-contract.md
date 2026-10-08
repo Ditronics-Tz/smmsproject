@@ -52,9 +52,13 @@ Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the databas
 - `PAYMENTS`: deposit create/list/process and transaction reversal.
 - `MENU`: canteen item list/create/edit/delete endpoints, including `/list/canteen-items`.
 - `PARENT_LIMITS`: parent balance-threshold API and its scheduled low-balance sweep.
-- `NFC_SCAN`: scan requests that supply `card_uid`. Existing RFID requests using `card_number` remain available regardless of this flag. The current card model has no separate UID field; enabled NFC requests resolve the supplied UID through the existing card-number lookup until a dedicated NFC integration is added.
+- `NFC_SCAN`: scan requests that supply `card_uid`. Existing USB/RFID requests using `card_number` remain available regardless of this flag. NFC UIDs are normalized to uppercase hexadecimal and matched against `RFIDCard.uid_hex`.
 
-The current backend has no preorder, sponsorship, integration, stock, or insights endpoints. Their flags are available to clients/configuration and are included in profiles, but there is no corresponding route to gate yet. There are no `build_insights` or `build_daily_stats` tasks in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
+The current backend has no preorder, sponsorship, integration, or stock endpoints. Their flags are available to clients/configuration and are included in profiles, but there is no corresponding route to gate yet. `build_insights` skips work while `INSIGHTS` is disabled. There is no `build_daily_stats` task in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
+
+## Card UID/NFC scanning
+
+`POST /api/v1/sessions/scan-card` accepts exactly one of `card_number` or `card_uid`. UID scans require `NFC_SCAN`; send `scan_source: "nfc"` (inferred if omitted). USB scans default to `scan_source: "usb"`. Optional `client_scan_id` makes retries idempotent. Scans are rate-limited per operator using `SCAN_THROTTLE_RATE` (default 120/minute). Card UID format and the outstanding physical-card investigation are documented in `docs/card-identifiers.md`.
 
 ## Customer feature profiles
 

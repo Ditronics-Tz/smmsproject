@@ -23,6 +23,16 @@ logger.addHandler(file_handler)
 
 logger.info("Script started.")
 
+
+@shared_task
+def build_insights():
+    """Refresh scan-integrity insights; no scan pair is deleted on reruns."""
+    from .services.features import is_enabled
+    if not is_enabled('INSIGHTS'):
+        return 0
+    from .services.insights import build_impossible_scan_flags
+    return build_impossible_scan_flags()
+
 @shared_task
 def send_pending_notifications():
     """Celery task to send pending notifications via FCM and Email."""

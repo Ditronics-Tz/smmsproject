@@ -108,7 +108,7 @@ class TransactionSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='item.name', read_only=True)
     class Meta:
         model =  Transaction
-        fields = ['id','amount','student_name', 'card_number','item_name','transaction_date','transaction_status']
+        fields = ['id','amount','student_name', 'card_number','item_name','transaction_date','transaction_status','scan_source']
 
     def get_student_name(self, obj) -> str:
         return f'{obj.student_or_staff.first_name} {obj.student_or_staff.last_name}'
@@ -134,7 +134,7 @@ class RFIDCardSerializer(serializers.ModelSerializer):
     student_or_staff = UserSerializer(read_only=True)
     class Meta:
         model = RFIDCard
-        fields = ['id','balance', 'is_active','control_number','card_number','issued_date','student_or_staff', 'created_at']
+        fields = ['id','balance', 'is_active','control_number','card_number','uid_hex','issued_date','student_or_staff', 'created_at']
 
 
 # ----- ITEM INFO ----
@@ -246,9 +246,11 @@ class FullAdminSerializer(serializers.ModelSerializer):
 
 # ----- CREATE RFID CARD -----
 class CreateRFIDCardSerializer(serializers.ModelSerializer):
+    card_number = serializers.CharField(required=False, allow_blank=True)
+    card_uid = serializers.CharField(required=False, allow_blank=True, write_only=True)
     class Meta:
         model = RFIDCard
-        fields = ['id', 'balance', 'student_or_staff', 'is_active', 'control_number', 'card_number', 'issued_date']
+        fields = ['id', 'balance', 'student_or_staff', 'is_active', 'control_number', 'card_number', 'card_uid', 'issued_date']
         read_only_fields = ['control_number']  # Ensure control_number isn't required in requests
 
     # Generate control number automatically
@@ -270,6 +272,18 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
 
     # Create a new RFID card
     def create(self, validated_data):
+        from ..services.cards import normalize_uid
+        raw_uid = validated_data.pop('card_uid', None)
+        if raw_uid:
+            try:
+                uid_hex = normalize_uid(raw_uid)
+            except ValueError as exc:
+                raise serializers.ValidationError({'card_uid': str(exc)})
+            if RFIDCard.objects.filter(uid_hex=uid_hex).exists():
+                raise serializers.ValidationError({'card_uid': 'This UID is already registered.'})
+            validated_data['uid_hex'] = uid_hex
+        elif not validated_data.get('card_number'):
+            raise serializers.ValidationError({'card_number': 'card_number or card_uid is required'})
         student_or_staff = validated_data.get('student_or_staff')
 
         # Ensure the student_or_staff has a school assigned
@@ -277,6 +291,19 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
             school_number = student_or_staff.school.number  # Get the school number
         else:
             raise serializers.ValidationError({"school_number": "Student or staff must belong to a school."})
+
+        # The legacy card-number path remains unchanged. UID-only cards get a
+        # generated human/USB identifier from the existing number generator.
+        if not validated_data.get('card_number'):
+            for _ in range(20):
+                candidate = f"CARD-{self.generate_control_number(school_number)}"
+                if not RFIDCard.objects.filter(card_number=candidate).exists() and not RFIDCard.objects.filter(uid_hex=candidate).exists():
+                    validated_data['card_number'] = candidate
+                    break
+            else:
+                raise serializers.ValidationError({'card_uid': 'Could not allocate a unique card number.'})
+        if RFIDCard.objects.filter(uid_hex=validated_data.get('card_number').strip().upper()).exists():
+            raise serializers.ValidationError({'card_number': 'CARD_UID_CONFLICT'})
 
         # school_number = validated_data.pop('school_number')
         control_number = self.generate_control_number(school_number)
@@ -320,9 +347,15 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
 # ----- REPLACE CARD SERIALIZER -----
 class ReplaceCardSerializer(serializers.Serializer):
     old_card_id = serializers.UUIDField()
-    new_card_number = serializers.CharField(trim_whitespace=True)
+    new_card_number = serializers.CharField(trim_whitespace=True, required=False, allow_blank=True)
+    card_uid = serializers.CharField(required=False, allow_blank=True)
     reason = serializers.CharField(allow_blank=True, default='')
     carry_balance = serializers.BooleanField(default=True)
+
+    def validate(self, attrs):
+        if not attrs.get('new_card_number') and not attrs.get('card_uid'):
+            raise serializers.ValidationError('new_card_number or card_uid is required')
+        return attrs
 
 
 # ----- SERIALIZER FOR NOTIFICATIONS ------

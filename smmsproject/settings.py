@@ -123,6 +123,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.check_balance_thresholds",
         "schedule": crontab(hour="*/6"),  # Run every 6 hours
     },
+    "build-scan-insights": {
+        "task": "smmsapp.tasks.build_insights",
+        "schedule": crontab(minute="*/5"),
+    },
     "audit-purge": {
         "task": "smmsapp.tasks.audit_purge",
         "schedule": crontab(hour=2, minute=0),  # Daily 02:00
@@ -263,6 +267,7 @@ REST_FRAMEWORK = {
         'resend_invite': '5/min',    # per-admin invitation resend limit
     },
 }
+SCAN_THROTTLE_RATE = int(os.getenv('SCAN_THROTTLE_RATE', '120'))
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'SMMS API',

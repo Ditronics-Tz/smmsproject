@@ -227,6 +227,33 @@ class LastSessionDetailsView(APIView):
             "variance": summary['variance'],
             "status": summary['status'],
         }, status=status.HTTP_200_OK)
+
+
+class OperatorScanAnalyticsView(APIView):
+    """Per-operator scan counts and NFC share for analytics consumers."""
+    permission_classes = [IsAdminOnly, FeatureEnabled('ANALYTICS')]
+
+    def get(self, request):
+        from django.db.models import Count, Q
+        operators = CustomUser.objects.filter(role='operator').order_by('last_name', 'first_name')
+        school = get_admin_scope(request.user)
+        if school is not None:
+            operators = operators.filter(school=school)
+        rows = []
+        for operator in operators:
+            counts = ScannedData.objects.filter(session__operator=operator).aggregate(
+                total=Count('id'), nfc=Count('id', filter=Q(scan_source='nfc')),
+            )
+            total = counts['total'] or 0
+            nfc = counts['nfc'] or 0
+            rows.append({
+                'operator_id': str(operator.id),
+                'operator_name': f'{operator.first_name} {operator.last_name}'.strip() or operator.username,
+                'nfc_scans': nfc,
+                'total_scans': total,
+                'nfc_share': round(nfc / total, 4) if total else 0,
+            })
+        return Response({'operators': rows}, status=status.HTTP_200_OK)
     
 
 # API FOR RETURN PARENT'S STUDENT DETAILS

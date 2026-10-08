@@ -19,6 +19,8 @@ from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminOrParent, 
 from ..permissions.features import FeatureEnabled
 from ..services.audit import log_action, snapshot
 from ..utils import get_admin_scope
+from ..services.cards import normalize_uid
+from ..throttles import OperatorScanThrottle
 
 
 # --- API FOR SCAN RFID CARD ----- THIS IS THE MAIN FUNCTIONALITY OF THIS SYSTEM -----
@@ -26,6 +28,7 @@ from ..utils import get_admin_scope
     responses={201: ScannedDataSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class ScanRFIDCardView(APIView):
     permission_classes = [IsAuthenticated, FeatureEnabled('NFC_SCAN')]
+    throttle_classes = [OperatorScanThrottle]
 
     def post(self, request):
         user = request.user
@@ -33,8 +36,33 @@ class ScanRFIDCardView(APIView):
         if user.role != 'operator':
             return Response({'code': 403, 'message': 'Only operators can scan cards'}, status=status.HTTP_403_FORBIDDEN)
 
+        request_serializer = ScanRFIDRequestSerializer(data=request.data)
+        if not request_serializer.is_valid():
+            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         session_id = request.data.get('session_id')
-        card_number = request.data.get('card_number') or request.data.get('card_uid')
+        has_card_number = 'card_number' in request.data
+        has_card_uid = 'card_uid' in request.data
+        if has_card_number == has_card_uid or not request.data.get('card_number' if has_card_number else 'card_uid'):
+            return Response({'code': 'CARD_IDENTIFIER_REQUIRED', 'message': 'Provide exactly one of card_number or card_uid.'}, status=status.HTTP_400_BAD_REQUEST)
+        is_uid = has_card_uid
+        if is_uid:
+            try:
+                card_uid = normalize_uid(request.data.get('card_uid'))
+            except ValueError as exc:
+                return Response({'code': 'INVALID_CARD_UID', 'message': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            card_number = str(request.data.get('card_number')).strip()
+        client_scan_id = request.data.get('client_scan_id')
+        if client_scan_id:
+            previous = ScannedData.objects.filter(client_scan_id=client_scan_id).first()
+            if previous:
+                if previous.session.operator_id != user.id:
+                    return Response({'code': 'CLIENT_SCAN_ID_CONFLICT', 'message': 'client_scan_id is already used by another operator.'}, status=status.HTTP_409_CONFLICT)
+                return Response(ScannedDataSerializer(previous).data, status=status.HTTP_200_OK)
+        scan_source = request.data.get('scan_source', 'nfc' if is_uid else 'usb')
+        if is_uid and scan_source != 'nfc':
+            return Response({'code': 'INVALID_SCAN_SOURCE', 'message': 'UID scans must use scan_source=nfc.'}, status=status.HTTP_400_BAD_REQUEST)
         item_id = request.data.get('item_id')
 
         # Validate session
@@ -59,7 +87,8 @@ class ScanRFIDCardView(APIView):
             # Validate RFID Card, locking the row for the duration of this
             # transaction so the balance read and deduct are race-free.
             try:
-                rfid_card = RFIDCard.objects.select_for_update().get(card_number=card_number, is_active=True)
+                lookup = {'uid_hex': card_uid} if is_uid else {'card_number': card_number}
+                rfid_card = RFIDCard.objects.select_for_update().get(**lookup, is_active=True)
                 student_or_staff = rfid_card.student_or_staff
             except RFIDCard.DoesNotExist:
                 return Response({'code': 115, 'message': 'Invalid or inactive RFID card'}, status=status.HTTP_404_NOT_FOUND)
@@ -114,6 +143,7 @@ class ScanRFIDCardView(APIView):
                 amount=amount,
                 transaction_status=trans_status,
                 session=session,
+                scan_source=scan_source,
             )
 
             # Write ledger entry for the balance change
@@ -147,7 +177,9 @@ class ScanRFIDCardView(APIView):
                 session=session,
                 student_or_staff=student_or_staff,
                 rfid_card=rfid_card,
-                item=item
+                item=item,
+                scan_source=scan_source,
+                client_scan_id=client_scan_id,
             )
 
             # Notify parent (email/push via Notification + SMS for feature phones)

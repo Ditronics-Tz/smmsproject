@@ -460,8 +460,9 @@ class CreateCardView(generics.CreateAPIView):
             student_or_staff = request.data.get("student_or_staff")
             card_number = request.data.get("card_number")
 
-            if not card_number:
-                return Response({"code": 104, "message": "Card number is required"}, status=status.HTTP_400_BAD_REQUEST)
+            card_uid = request.data.get('card_uid')
+            if not card_number and not card_uid:
+                return Response({"code": 104, "message": "card_number or card_uid is required"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Validate student_or_staff is a real UUID up front so the raw
             # existence filter below cannot raise an unhandled error (500) on
@@ -477,6 +478,16 @@ class CreateCardView(generics.CreateAPIView):
             # Check if card number already taken
             if RFIDCard.objects.filter(card_number=card_number).exists():
                 return Response({"code": 105, "message": "This card number already exists"}, status=status.HTTP_400_BAD_REQUEST)
+            if card_number and RFIDCard.objects.filter(uid_hex=card_number.strip().upper()).exists():
+                return Response({"code": "CARD_UID_CONFLICT", "message": "Card number conflicts with another card UID."}, status=status.HTTP_409_CONFLICT)
+            if card_uid:
+                from ..services.cards import normalize_uid
+                try:
+                    normalized_uid = normalize_uid(card_uid)
+                except ValueError as exc:
+                    return Response({"code": "INVALID_CARD_UID", "message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                if RFIDCard.objects.filter(uid_hex=normalized_uid).exists() or RFIDCard.objects.filter(card_number=normalized_uid).exists():
+                    return Response({"code": "CARD_UID_CONFLICT", "message": "UID conflicts with an existing card identifier."}, status=status.HTTP_409_CONFLICT)
             
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -718,7 +729,8 @@ class ReplaceCardView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         old_card_id = serializer.validated_data['old_card_id']
-        new_card_number = serializer.validated_data['new_card_number'].strip()
+        new_card_number = serializer.validated_data.get('new_card_number', '').strip()
+        card_uid_value = serializer.validated_data.get('card_uid', '').strip()
         reason = serializer.validated_data['reason']
         carry_balance = serializer.validated_data['carry_balance']
 
@@ -741,11 +753,17 @@ class ReplaceCardView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-                if not new_card_number:
-                    return Response(
-                        {"code": 104, "message": "new_card_number is required"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                uid_hex = None
+                if card_uid_value:
+                    from ..services.cards import normalize_uid
+                    try:
+                        uid_hex = normalize_uid(card_uid_value)
+                    except ValueError as exc:
+                        return Response({"code": "INVALID_CARD_UID", "message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                    if RFIDCard.objects.filter(uid_hex=uid_hex).exists() or RFIDCard.objects.exclude(id=old_card.id).filter(card_number=uid_hex).exists():
+                        return Response({"code": "CARD_UID_CONFLICT", "message": "UID conflicts with another card identifier."}, status=status.HTTP_409_CONFLICT)
+                if RFIDCard.objects.exclude(id=old_card.id).filter(uid_hex=new_card_number.strip().upper()).exists():
+                    return Response({"code": "CARD_UID_CONFLICT", "message": "Card number conflicts with another card UID."}, status=status.HTTP_409_CONFLICT)
 
                 # New card number must be unique across all cards.
                 if RFIDCard.objects.filter(card_number=new_card_number).exists():
@@ -764,11 +782,20 @@ class ReplaceCardView(APIView):
                         {"code": 400, "message": "Card owner must belong to a school to issue a replacement."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+                if not new_card_number:
+                    for _ in range(20):
+                        candidate = f"CARD-{ctrl_generator.generate_control_number(school.number)}"
+                        if not RFIDCard.objects.filter(card_number=candidate).exists() and not RFIDCard.objects.filter(uid_hex=candidate).exists():
+                            new_card_number = candidate
+                            break
+                    if not new_card_number:
+                        return Response({"code": 500, "message": "Could not allocate a unique card number."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 control_number = ctrl_generator.generate_control_number(school.number)
 
                 # Create the new active card with the carried-over balance.
                 new_card = RFIDCard.objects.create(
                     card_number=new_card_number,
+                    uid_hex=uid_hex,
                     control_number=control_number,
                     student_or_staff=student_or_staff,
                     balance=old_card.balance if carry_balance else 0.0,

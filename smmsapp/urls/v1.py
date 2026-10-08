@@ -5,6 +5,7 @@ urlpatterns = [
     path('config/', include('smmsapp.urls.config')),
     path('auth/', include('smmsapp.urls.auth')),
     path('dashboard/', include('smmsapp.urls.dashboard')),
+    path('analytics/', include('smmsapp.urls.analytics')),
     path('resources/', include('smmsapp.urls.resources')),
     path('sessions/', include('smmsapp.urls.sessions')),
     path('list/', include('smmsapp.urls.lists')),

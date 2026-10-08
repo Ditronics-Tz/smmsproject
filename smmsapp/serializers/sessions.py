@@ -46,6 +46,8 @@ class ScanRFIDRequestSerializer(serializers.Serializer):
     session_id = serializers.UUIDField(required=False, allow_null=True)
     card_number = serializers.CharField(required=False, allow_blank=True)
     card_uid = serializers.CharField(required=False, allow_blank=True)
+    client_scan_id = serializers.UUIDField(required=False, allow_null=True)
+    scan_source = serializers.ChoiceField(choices=['usb', 'nfc', 'manual'], required=False)
     item_id = serializers.UUIDField(required=False, allow_null=True)
 
 
@@ -101,7 +103,7 @@ class ScannedDataSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ScannedData
-        fields = ['id', 'session', 'student_name', 'card_number', 'item_name', 'item_price', 'scanned_at']
+        fields = ['id', 'session', 'student_name', 'card_number', 'item_name', 'item_price', 'scanned_at', 'scan_source']
         read_only_fields = ['id', 'scanned_at']
 
     def get_student_name(self, obj) -> str:
