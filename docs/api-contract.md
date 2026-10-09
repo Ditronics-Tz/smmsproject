@@ -25,7 +25,7 @@ Creating a user issues a single-use password-setting invite. The invite is sent 
 
 `POST /api/v1/auth/resend-invite` accepts `{ "user_id": "<UUID>" }` and is restricted to administrators. It invalidates previous unused password reset/invite tokens, issues a new token, and sends the invite by email or SMS when possible. If the user has neither contact method, the response includes `invite_link` once. Requests are limited to five per minute per administrator.
 
-The invite link opens `/auth/accept-invite` with its one-time token in the URL fragment. The page submits the token to `POST /api/v1/auth/reset-password/confirm` with `{ "token": "<token>", "new_password": "<password>" }`. The token is single-use and expires after 30 minutes. Keeping it in the fragment prevents it from being sent in the initial HTTP request URL.
+The invite link opens `/auth/accept-invite` with its one-time token in the URL fragment. The page submits the token to `POST /api/v1/auth/reset-password/confirm` with `{ "token": "<token>", "new_password": "<password>" }`. The token is single-use and expires after 48 hours by default; deployments can change this with `INVITE_TOKEN_TTL_HOURS`. Keeping it in the fragment prevents it from being sent in the initial HTTP request URL.
 
 Creating or editing a user with role `admin` requires a school. Only a platform
 superuser may explicitly set `is_superuser: true` to create a schoolless
