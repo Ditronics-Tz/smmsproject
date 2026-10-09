@@ -12,7 +12,7 @@ A web service for managing student meals, built with Django and PostgreSQL. This
 - **Backend:** Django, Django REST Framework
 - **Database:** PostgreSQL
 - **Containerization & Deployment:** Docker, Nginx, Gunicorn
-- **Version Control & CI/CD:** GitHub Actions
+- **Version Control:** Git
 
 ---
 ## Installation & Setup
@@ -90,47 +90,24 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 ```
 
 ---
-## CI/CD Deployment with GitHub Actions
-### Steps to Push to GitHub and Deploy
-1. Commit and push changes to GitHub:
-   ```bash
-   git add .
-   git commit -m [write-comment]
-   git push origin <your-feature-branch>
-   # Open a pull request into main and merge after checks pass.
-   ```
+## Manual verification and deployment
 
-2. Set up GitHub Actions workflow (`.github/workflows/deploy.yml`):
-   ```yaml
-   name: Deploy
-   on:
-     push:
-       branches:
-         - main
-   jobs:
-     deploy:
-       runs-on: ubuntu-latest
-       steps:
-         - name: Checkout code
-           uses: actions/checkout@v3
-         - name: Deploy to Server
-           uses: appleboy/ssh-action@v0.1.7
-           with:
-             host: ${{ secrets.SERVER_IP }}
-             username: ${{ secrets.SERVER_USER }}
-             key: ${{ secrets.SSH_PRIVATE_KEY }}
-             script: |
-               cd /path/to/project
-               git pull origin main
-               docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
-   ```
+This repository currently has no CI/CD workflows. Before merging or deploying,
+run the checks locally and review their results:
 
-### Environment Variables in GitHub Secrets
-- `SERVER_IP`: Your server's IP address
-- `SERVER_USER`: Your SSH username
-- `SSH_PRIVATE_KEY`: SSH key for authentication
+```bash
+python manage.py test smmsapp.tests
+make schema
+git diff --exit-code -- docs/openapi.yaml
+pip-audit -r requirements.txt --no-deps
+```
 
-Once set up, pushing to the `main` branch will automatically deploy the application.
+Deploy manually from the server after reviewing and merging the intended commit:
+
+```bash
+git pull --ff-only origin main
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+```
 
 ---
 ## API Endpoints

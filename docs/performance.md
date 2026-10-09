@@ -30,6 +30,7 @@ database, never production.
    recording the database version, host, fixture counts, warm/cold-cache state,
    and command output. Compare before/after changes using the same conditions.
 
-CI runs a reduced seeder test that asserts wallet and hold journal balances
-match their card balances. A production-sized PostgreSQL timing run is an
-operational benchmark, not part of unit tests.
+Run the reduced seeder test manually with the test suite; it asserts wallet and
+hold journal balances match their card balances. CI workflows have been removed,
+so no test runs automatically on pushes or pull requests. A production-sized
+PostgreSQL timing run is an operational benchmark, not part of unit tests.
