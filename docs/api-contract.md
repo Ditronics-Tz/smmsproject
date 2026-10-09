@@ -27,6 +27,12 @@ Creating a user issues a single-use password-setting invite. The invite is sent 
 
 The invite link opens `/auth/accept-invite` with its one-time token in the URL fragment. The page submits the token to `POST /api/v1/auth/reset-password/confirm` with `{ "token": "<token>", "new_password": "<password>" }`. The token is single-use and expires after 30 minutes. Keeping it in the fragment prevents it from being sent in the initial HTTP request URL.
 
+Creating or editing a user with role `admin` requires a school. Only a platform
+superuser may explicitly set `is_superuser: true` to create a schoolless
+platform-owner account; this field is write-only and is never accepted from a
+regular administrator. `python manage.py list_admins_without_school` reports
+legacy schoolless admin accounts without modifying them.
+
 ## Error responses
 
 Errors use the existing numeric `code` and human-readable `message` response fields. Documented codes and meanings are listed in [error-codes.md](error-codes.md). Throttled requests return HTTP 429.

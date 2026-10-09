@@ -63,6 +63,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     middle_name = serializers.CharField(write_only=True, required=False)  # Optional for middle name
     gender = serializers.ChoiceField(choices=CustomUser.GENDER_CHOICES, required=False)  # Gender choices
     profile_picture = serializers.ImageField(write_only=True, required=False)
+    is_superuser = serializers.BooleanField(required=False, write_only=True, default=False)
 
    # Accept multiple parent IDs when creating a student
     parent_ids = serializers.ListField(child=serializers.UUIDField(), write_only=True, required=False)
@@ -74,10 +75,22 @@ class UserCreateSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'first_name','middle_name', 'last_name', 'username', 'email', 'mobile_number', 'role', 
                   'school','class_room', 'gender', 'password','profile_picture','parent_type',
-                  'parent_ids', 'student_ids', 'password_set']
+                  'parent_ids', 'student_ids', 'password_set', 'is_superuser']
         read_only_fields = ['id', 'password_set']
 
     password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
+
+    def validate(self, attrs):
+        role = attrs.get('role', getattr(self.instance, 'role', None))
+        school = attrs.get('school', getattr(self.instance, 'school', None))
+        explicit_superuser = attrs.get('is_superuser') is True
+        request = self.context.get('request')
+        creator_is_superuser = bool(request and request.user.is_authenticated and request.user.is_superuser)
+        if explicit_superuser and not creator_is_superuser:
+            raise serializers.ValidationError({'is_superuser': 'Only a superuser may create or promote a superuser.'})
+        if role == 'admin' and school is None and not (creator_is_superuser and explicit_superuser):
+            raise serializers.ValidationError({'school': 'An admin user must be assigned to a school.'})
+        return attrs
     # Generate unique username for student
     def generate_username(self, first_name, last_name, school_name):
         """Generate a unique username using first_name.last_name + 3 random digits"""
@@ -91,6 +104,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     # Create user
     def create(self, validated_data):
         role = validated_data.pop('role')
+        is_superuser = validated_data.pop('is_superuser', False)
         student_ids = validated_data.pop('student_ids', [])
         parent_ids = validated_data.pop('parent_ids', [])
         user = None 
@@ -109,7 +123,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             validated_data.pop('password', None) # Students do not need a password
             validated_data['username'] = username
 
-            user = CustomUser.objects.create(role=role, **validated_data)
+            user = CustomUser.objects.create(role=role, is_superuser=is_superuser, **validated_data)
             user.set_unusable_password()
             user.save(update_fields=['password'])
 
@@ -123,7 +137,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             
         else:
             validated_data.pop('password', None)
-            user = CustomUser.objects.create(role=role, **validated_data)
+            user = CustomUser.objects.create(role=role, is_superuser=is_superuser, **validated_data)
             user.set_unusable_password()
             user.save(update_fields=['password'])
 
@@ -139,7 +153,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     # Edit user
     def update(self, instance, validated_data):
-        role = validated_data.pop('role')
+        role = validated_data.pop('role', instance.role)
+        is_superuser = validated_data.pop('is_superuser', instance.is_superuser)
         student_ids = validated_data.pop('student_ids', [])
         parent_ids = validated_data.pop('parent_ids', [])
         user = None
@@ -172,6 +187,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 except CustomUser.DoesNotExist:
                     raise serializers.ValidationError({"code": 107, "message": "Invalid student ID"})
                 
+        if user.is_superuser != is_superuser:
+            user.is_superuser = is_superuser
+            user.save(update_fields=['is_superuser'])
         return user
 
 
