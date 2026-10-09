@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from smmsapp.models import CanteenItem, FeatureFlag, RFIDCard, ScanSession, School, ScannedData, Transaction
+from smmsapp.models import CanteenItem, FeatureFlag, InsightFlag, RFIDCard, ScanSession, School, ScannedData, Transaction
 from smmsapp.services.cards import normalize_uid
 from smmsapp.services.insights import build_impossible_scan_flags
 
@@ -100,6 +100,26 @@ class ImpossibleScanTests(TestCase):
 
         self.assertEqual(build_impossible_scan_flags(), 1)
         self.assertEqual(build_impossible_scan_flags(), 0)
+
+    def test_flags_different_meal_types_within_ten_minutes(self):
+        school = School.objects.create(name='Meal Type Scan School')
+        student = User.objects.create_user(username='meal-scan-student', role='student', school=school)
+        operator = User.objects.create_user(username='meal-scan-operator', role='operator', school=school)
+        card = RFIDCard.objects.create(
+            card_number='MEAL-SCAN-CARD', control_number='MEAL-SCAN-CTRL', student_or_staff=student,
+        )
+        item = CanteenItem.objects.create(name='Meal Type Meal', price=Decimal('10'))
+        breakfast = ScanSession.objects.create(operator=operator, type='breakfast')
+        lunch = ScanSession.objects.create(operator=operator, type='lunch')
+        first = ScannedData.objects.create(session=breakfast, student_or_staff=student, rfid_card=card, item=item)
+        second = ScannedData.objects.create(session=lunch, student_or_staff=student, rfid_card=card, item=item)
+        first_at = timezone.now()
+        ScannedData.objects.filter(pk=first.pk).update(scanned_at=first_at)
+        ScannedData.objects.filter(pk=second.pk).update(scanned_at=first_at + timedelta(minutes=9))
+
+        self.assertEqual(build_impossible_scan_flags(), 1)
+        flag = InsightFlag.objects.get(kind='impossible_scan')
+        self.assertEqual({flag.scan_a_id, flag.scan_b_id}, {first.id, second.id})
 
 
 class OperatorNFCShareTests(TestCase):
