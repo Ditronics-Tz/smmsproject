@@ -30,14 +30,25 @@ def build_insights():
     from .services.features import is_enabled
     if not is_enabled('INSIGHTS'):
         return 0
-    from .services.insights import build_impossible_scan_flags
-    return build_impossible_scan_flags()
+    from .services.insights import build_all_insight_flags
+    return build_all_insight_flags()
 
 
 @shared_task
 def check_ledger_integrity():
     from .services.ledger import check_ledger_integrity as run_check
     return run_check(persist=True)
+
+
+@shared_task
+def build_daily_stats(day_iso=None):
+    """Build stats for the previous local day; historical snapshots are rebuildable."""
+    from datetime import date, timedelta
+    from django.utils import timezone
+    from .services.analytics import build_daily_stats_for_day
+
+    day = date.fromisoformat(day_iso) if day_iso else timezone.localdate() - timedelta(days=1)
+    return build_daily_stats_for_day(day)
 
 
 @shared_task

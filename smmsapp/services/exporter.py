@@ -1,10 +1,18 @@
 import csv
+from datetime import date, timedelta
+from decimal import Decimal
 from io import BytesIO, StringIO
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 
-from ..models import Transaction, CustomUser, BankDeposit, CanteenItem
+from ..models import (
+    BankDeposit, CustomUser, CanteenItem, ParentStudent, RFIDCard,
+    Reconciliation, Reversal, ScanSession, Transaction,
+)
+from .alerts import _effective_threshold
 from ..utils import get_admin_scope
 
 EXPORT_SYNC_MAX_ROWS = getattr(settings, 'EXPORT_SYNC_MAX_ROWS', 2000)
@@ -165,6 +173,114 @@ def _deposit_rows(qs):
     return rows
 
 
+def _analytics_dates(filters):
+    today = timezone.localdate()
+    start = filters.get('from_date') or (today - timedelta(days=settings.ANALYTICS_DEFAULT_RANGE_DAYS - 1))
+    end = filters.get('to_date') or today
+    if isinstance(start, str):
+        start = date.fromisoformat(start)
+    if isinstance(end, str):
+        end = date.fromisoformat(end)
+    return start, end
+
+
+def _analytics_txns(user, filters):
+    start, end = _analytics_dates(filters)
+    qs = Transaction.objects.filter(
+        transaction_date__date__gte=start, transaction_date__date__lte=end,
+        transaction_status__in=['successful', 'penalty'], is_voided=False,
+    )
+    school = get_admin_scope(user)
+    if school is not None:
+        qs = qs.filter(student_or_staff__school=school)
+    return qs
+
+
+def analytics_sales_queryset(user, filters):
+    return list(_analytics_txns(user, filters).annotate(day=TruncDate('transaction_date')).values('day').annotate(
+        revenue=Sum('charged_amount', filter=Q(transaction_status='successful')),
+        penalty=Sum('charged_amount', filter=Q(transaction_status='penalty')),
+        meals=Count('id'),
+    ).order_by('day'))
+
+
+def _analytics_sales_rows(rows):
+    return [[r['day'].isoformat(), r['revenue'] or Decimal('0.00'), r['meals'], r['penalty'] or Decimal('0.00')] for r in rows]
+
+
+def analytics_wallet_health_queryset(user, filters):
+    cards = RFIDCard.objects.filter(is_active=True).select_related('student_or_staff')
+    school = get_admin_scope(user)
+    if school is not None:
+        cards = cards.filter(student_or_staff__school=school)
+    card_rows = list(cards)
+    parent_links = ParentStudent.objects.filter(student_id__in=[c.student_or_staff_id for c in card_rows]).select_related('parent')
+    thresholds = {}
+    for link in parent_links:
+        thresholds.setdefault(link.student_id, []).append(_effective_threshold(link.parent))
+    summary = {
+        'float_total': sum((c.balance for c in card_rows), Decimal('0.00')),
+        'avg_balance': sum((c.balance for c in card_rows), Decimal('0.00')) / len(card_rows) if card_rows else Decimal('0.00'),
+        'below_threshold': sum(1 for c in card_rows if any(c.balance < threshold for threshold in thresholds.get(c.student_or_staff_id, []))),
+        'at_floor': sum(1 for c in card_rows if c.balance <= Decimal(str(settings.RFID_BALANCE_FLOOR))),
+        'near_strike_limit': sum(1 for c in card_rows if c.insufficient_meal_count >= settings.STRIKE_LIMIT - 2),
+    }
+    start, end = _analytics_dates(filters)
+    deposits = BankDeposit.objects.filter(status='processed', processed_at__date__gte=start, processed_at__date__lte=end)
+    spends = _analytics_txns(user, filters)
+    if school is not None:
+        deposits = deposits.filter(control_number__student_or_staff__school=school)
+    deposits_by_day = {r['day']: r['total'] for r in deposits.annotate(day=TruncDate('processed_at')).values('day').annotate(total=Sum('amount'))}
+    spends_by_day = {r['day']: r['total'] for r in spends.annotate(day=TruncDate('transaction_date')).values('day').annotate(total=Sum('charged_amount'))}
+    daily_rows = []
+    current = start
+    while current <= end:
+        daily_rows.append((current, deposits_by_day.get(current, Decimal('0.00')), spends_by_day.get(current, Decimal('0.00'))))
+        current += timedelta(days=1)
+    return {'summary': summary, 'daily': daily_rows}
+
+
+def _analytics_wallet_rows(data):
+    summary = data['summary']
+    rows = [
+        ['summary', '', 'float_total', summary['float_total'], ''],
+        ['summary', '', 'avg_balance', summary['avg_balance'], ''],
+        ['summary', '', 'below_threshold', '', summary['below_threshold']],
+        ['summary', '', 'at_floor', '', summary['at_floor']],
+        ['summary', '', 'near_strike_limit', '', summary['near_strike_limit']],
+    ]
+    rows.extend([['daily', day.isoformat(), '', deposits, spend] for day, deposits, spend in data['daily']])
+    return rows
+
+
+def analytics_operators_queryset(user, filters):
+    start, end = _analytics_dates(filters)
+    operators = CustomUser.objects.filter(role='operator').order_by('last_name', 'first_name')
+    school = get_admin_scope(user)
+    if school is not None:
+        operators = operators.filter(school=school)
+    rows = []
+    for operator in operators:
+        sessions = ScanSession.objects.filter(operator=operator, start_at__date__gte=start, start_at__date__lte=end)
+        session_ids = sessions.values('id')
+        totals = Transaction.objects.filter(
+            session_id__in=session_ids, transaction_date__date__gte=start, transaction_date__date__lte=end,
+            transaction_status='successful', is_voided=False,
+        ).aggregate(revenue=Sum('charged_amount'))
+        variance = Reconciliation.objects.filter(session_id__in=session_ids).aggregate(total=Sum('variance'))['total']
+        reversal_count = Reversal.objects.filter(transaction__session__operator=operator, reversed_at__date__gte=start, reversed_at__date__lte=end).count()
+        rows.append({
+            'operator': f'{operator.first_name} {operator.last_name}'.strip() or operator.username,
+            'sessions': sessions.count(), 'revenue': totals['revenue'] or Decimal('0.00'),
+            'variance': variance or Decimal('0.00'), 'reversals': reversal_count,
+        })
+    return rows
+
+
+def _analytics_operator_rows(rows):
+    return [[r['operator'], r['sessions'], r['revenue'], r['variance'], r['reversals']] for r in rows]
+
+
 TRANSACTION_HEADERS = [
     'Transaction ID', 'Username', 'Name', 'Card Number', 'Item', 'Charged Amount',
     'Status', 'Transaction Date', 'Voided',
@@ -181,6 +297,9 @@ ENTITY_BUILDERS = {
     'transactions': (transaction_queryset, _transaction_rows, TRANSACTION_HEADERS),
     'students': (student_queryset, _student_rows, STUDENT_HEADERS),
     'deposits': (deposit_queryset, _deposit_rows, DEPOSIT_HEADERS),
+    'analytics_sales': (analytics_sales_queryset, _analytics_sales_rows, ['Date', 'Revenue', 'Meals', 'Penalty Amount']),
+    'analytics_wallet_health': (analytics_wallet_health_queryset, _analytics_wallet_rows, ['Record Type', 'Date', 'Metric', 'Deposits or Value', 'Spend or Count']),
+    'analytics_operators': (analytics_operators_queryset, _analytics_operator_rows, ['Operator', 'Sessions', 'Revenue', 'Variance', 'Reversals']),
 }
 
 

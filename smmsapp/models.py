@@ -331,6 +331,12 @@ class Transaction(models.Model):
     scan_source = models.CharField(max_length=10, choices=SCAN_SOURCE_CHOICES, default='usb')
     preorder_item = models.ForeignKey('PreOrderItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['transaction_date'], name='txn_date_idx'),
+            models.Index(fields=['transaction_status', 'is_voided'], name='txn_status_void_idx'),
+        ]
+
     def __str__(self):
         return f"{self.student_or_staff.username} - {self.item.name} - ${self.amount}"
 
@@ -384,15 +390,45 @@ class ScannedData(models.Model):
 
 
 class InsightFlag(models.Model):
-    """Persisted evidence for suspicious pairs of scans."""
+    """Persisted, resolvable evidence for operational or suspicious events."""
+    STATUS_CHOICES = [('open', 'Open'), ('resolved', 'Resolved')]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     kind = models.CharField(max_length=40, default='impossible_scan')
-    scan_a = models.ForeignKey(ScannedData, on_delete=models.CASCADE, related_name='insight_flags_a')
-    scan_b = models.ForeignKey(ScannedData, on_delete=models.CASCADE, related_name='insight_flags_b')
+    reference_type = models.CharField(max_length=40, null=True, blank=True)
+    reference_id = models.CharField(max_length=80, null=True, blank=True)
+    detail = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open')
+    resolved_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_insights')
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(blank=True)
+    scan_a = models.ForeignKey(ScannedData, on_delete=models.CASCADE, null=True, blank=True, related_name='insight_flags_a')
+    scan_b = models.ForeignKey(ScannedData, on_delete=models.CASCADE, null=True, blank=True, related_name='insight_flags_b')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['kind', 'scan_a', 'scan_b'], name='uniq_insight_scan_pair')]
+        constraints = [
+            models.UniqueConstraint(fields=['kind', 'scan_a', 'scan_b'], name='uniq_insight_scan_pair'),
+            models.UniqueConstraint(
+                fields=['kind', 'reference_type', 'reference_id'],
+                condition=Q(reference_type__isnull=False, reference_id__isnull=False),
+                name='uniq_insight_reference',
+            ),
+        ]
+
+
+class DailyStats(models.Model):
+    date = models.DateField()
+    meal_type = models.CharField(max_length=20)
+    revenue = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    penalty_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    meals = models.PositiveIntegerField(default=0)
+    unique_students = models.PositiveIntegerField(default=0)
+    deposits_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    reversals = models.PositiveIntegerField(default=0)
+    variance_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['date', 'meal_type'], name='uniq_daily_stats_date_meal')]
 
 
 # ------ LEDGER ENTRY TABLE ------

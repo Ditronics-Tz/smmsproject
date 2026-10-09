@@ -56,7 +56,7 @@ Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the databas
 - `PARENT_LIMITS`: parent balance-threshold API and its scheduled low-balance sweep.
 - `NFC_SCAN`: scan requests that supply `card_uid`. Existing USB/RFID requests using `card_number` remain available regardless of this flag. NFC UIDs are normalized to uppercase hexadecimal and matched against `RFIDCard.uid_hex`.
 
-`PREORDER` gates the preorder API and its scan fulfilment path. `STOCK` gates stock-management endpoints and the scheduled stock-alert task. Sponsorship and integration flags are available to clients/configuration and included in profiles, but those modules do not yet have corresponding routes. `build_insights` skips work while `INSIGHTS` is disabled. There is no `build_daily_stats` task in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
+`PREORDER` gates the preorder API and its scan fulfilment path. `STOCK` gates stock-management endpoints and the scheduled stock-alert task. Sponsorship and integration flags are available to clients/configuration and included in profiles, but those modules do not yet have corresponding routes. `build_insights` skips work while `INSIGHTS` is disabled. `build_daily_stats` runs regardless of `ANALYTICS` so reporting snapshots remain current; it is core aggregation work, not a feature API. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
 
 ## Parent spending controls (BE-90)
 
@@ -80,6 +80,14 @@ Menu item `price` is the override when present, otherwise the canteen item's cur
 ## Stock control (BE-120)
 
 `GET /api/v1/stock/` lists inventory levels. Admins adjust inventory with `POST /api/v1/stock/adjust` using `{ item_id, delta, reason, low_threshold? }`; negative resulting quantities are rejected. Meal scans decrement tracked stock under a row lock, and transaction reversal restores one unit. `STOCK_ENFORCED` defaults to false; when enabled, a scan against an empty or unconfigured stock level returns HTTP 409 `OUT_OF_STOCK`. Stock endpoints and the daily alert task are gated by `STOCK`.
+
+## Analytics and insights (BE-40–45)
+
+Analytics endpoints are read-only and admin-only, gated by `ANALYTICS`. Date filters use ISO dates, default to the most recent `ANALYTICS_DEFAULT_RANGE_DAYS`, and cannot exceed `ANALYTICS_MAX_RANGE_DAYS`. Sales groups by `day` (default), `item`, or `hour`; results distinguish successful revenue from penalty charges and exclude voided transactions. `/analytics/operators` retains the `{ operators: [...] }` wrapper and also reports session counts, revenue, variance, reversals, and NFC share.
+
+`/analytics/wallet-health`, `/analytics/classes`, and `/analytics/penalties` follow the shapes in the task contract. The daily snapshot includes one row per meal type plus an `all` row; deposits and overall unique-student totals live on the `all` row to avoid counting deposits once per meal. `build_daily_stats` runs daily at 01:00 regardless of `ANALYTICS`, and can be rebuilt with `python manage.py backfill_daily_stats --from YYYY-MM-DD --to YYYY-MM-DD`.
+
+Insights endpoints (`/insights/forecast`, `/insights/at-risk`, `/insights/anomalies`, `/insights/anomalies/{id}/resolve`, `/insights/dormant-cards`) are admin-only and gated by `INSIGHTS`. The hourly `build_insights` task skips work while that flag is disabled. An anomaly resolution is audited and remains resolved on later task runs.
 
 ## Pre-orders (BE-149–155)
 

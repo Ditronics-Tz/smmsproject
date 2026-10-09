@@ -29,6 +29,8 @@ Error responses use a `code` (numeric for legacy codes, string for named contrac
 | `PARENT_REQUIRED` | Only a parent can manage child spending controls. | 403 |
 | `OUT_OF_STOCK` | The item has no remaining inventory while stock enforcement is enabled. | 409 |
 | `STOCK_ADJUSTMENT_NEGATIVE` | The adjustment would make an inventory quantity negative. | 400 |
+| `INVALID_DATE_RANGE` | Analytics `from`/`to` dates are malformed, reversed, or span too many days. | 400 |
+| `INSIGHT_ALREADY_RESOLVED` | The anomaly has already been resolved. | 409 |
 | `MENU_ITEM_HAS_PREORDERS` | A menu item cannot be removed while active pre-orders reference that menu. | 409 |
 | `PREORDER_CUTOFF_PASSED` | The Tanzania-local ordering cutoff has passed. | 400 |
 | `PREORDER_NO_MENU` | No menu exists for the requested date and meal. | 400 |

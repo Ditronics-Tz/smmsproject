@@ -126,11 +126,15 @@ CELERY_BEAT_SCHEDULE = {
     },
     "build-scan-insights": {
         "task": "smmsapp.tasks.build_insights",
-        "schedule": crontab(minute="*/5"),
+        "schedule": crontab(minute=0),
     },
     "check-ledger-integrity": {
         "task": "smmsapp.tasks.check_ledger_integrity",
         "schedule": crontab(hour=2, minute=30),
+    },
+    "build-daily-stats": {
+        "task": "smmsapp.tasks.build_daily_stats",
+        "schedule": crontab(hour=1, minute=0),
     },
     "expire-preorders": {
         "task": "smmsapp.tasks.expire_preorders",
@@ -150,6 +154,10 @@ CELERY_BEAT_SCHEDULE = {
 DEFAULT_BALANCE_THRESHOLD = '1000.00'
 MENU_ENFORCED = os.getenv('MENU_ENFORCED', 'False') == 'True'
 STOCK_ENFORCED = os.getenv('STOCK_ENFORCED', 'False') == 'True'
+ANALYTICS_DEFAULT_RANGE_DAYS = int(os.getenv('ANALYTICS_DEFAULT_RANGE_DAYS', '30'))
+ANALYTICS_MAX_RANGE_DAYS = int(os.getenv('ANALYTICS_MAX_RANGE_DAYS', '366'))
+INSIGHT_REVERSAL_LIMIT = int(os.getenv('INSIGHT_REVERSAL_LIMIT', '10'))
+INSIGHT_VARIANCE_LIMIT = Decimal(os.getenv('INSIGHT_VARIANCE_LIMIT', '10000.00'))
 RFID_BALANCE_FLOOR = os.getenv('RFID_BALANCE_FLOOR', '-500.00')
 PENALTY_FEE = Decimal(os.getenv('PENALTY_FEE', '500.00'))
 STRIKE_LIMIT = int(os.getenv('STRIKE_LIMIT', '10'))

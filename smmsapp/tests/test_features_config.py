@@ -24,6 +24,12 @@ class FeatureFlagTests(TestCase):
         with self.assertRaises(KeyError):
             is_enabled('NEW_MNEU')
 
+    @override_settings(FEATURES_DEFAULT={'ANALYTICS': True})
+    def test_supported_flag_missing_from_env_defaults_to_false(self):
+        FeatureFlag.objects.filter(key='STOCK').delete()
+        cache.clear()
+        self.assertFalse(is_enabled('STOCK'))
+
     def test_model_update_invalidates_cached_values(self):
         self.assertFalse(is_enabled('NEW_MENU'))
         self.flag.enabled = True

@@ -18,6 +18,8 @@ from ..serializers.exports import (
     ExportAcceptedSerializer, ExportPendingSerializer, ExportRequestSerializer,
 )
 from ..serializers.system import CodeMessageSerializer
+from ..permissions.roles import IsAdminOnly
+from ..permissions.features import FeatureEnabled
 from ..services.exporter import (
     ENTITY_BUILDERS, EXPORT_SYNC_MAX_ROWS,
     export_to_csv, export_to_xlsx,
@@ -98,8 +100,9 @@ class BaseExportView(APIView):
         async_mode = data.get('async_mode', False)
         extension = 'xlsx' if export_format == 'xlsx' else 'csv'
 
-        queryset_fn, _, _ = ENTITY_BUILDERS[self.entity]
-        estimated = queryset_fn(request.user, filters).count()
+        queryset_fn, rows_fn, _ = ENTITY_BUILDERS[self.entity]
+        dataset = queryset_fn(request.user, filters)
+        estimated = dataset.count() if hasattr(dataset, 'query') else len(rows_fn(dataset))
 
         if not async_mode and estimated <= EXPORT_SYNC_MAX_ROWS:
             filename = f"{self.entity}-{uuid4().hex}.{extension}"
@@ -154,6 +157,21 @@ class StudentExportView(BaseExportView):
 
 class DepositExportView(BaseExportView):
     entity = 'deposits'
+
+
+class AnalyticsSalesExportView(BaseExportView):
+    entity = 'analytics_sales'
+    permission_classes = [IsAdminOnly, FeatureEnabled('ANALYTICS')]
+
+
+class AnalyticsWalletHealthExportView(BaseExportView):
+    entity = 'analytics_wallet_health'
+    permission_classes = [IsAdminOnly, FeatureEnabled('ANALYTICS')]
+
+
+class AnalyticsOperatorsExportView(BaseExportView):
+    entity = 'analytics_operators'
+    permission_classes = [IsAdminOnly, FeatureEnabled('ANALYTICS')]
 
 
 @extend_schema(
