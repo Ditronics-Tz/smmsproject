@@ -1344,6 +1344,27 @@ paths:
                 items:
                   $ref: '#/components/schemas/CardStatementLine'
           description: ''
+  /api/v1/ledger/funds/{fund_id}/statement:
+    get:
+      operationId: api_v1_ledger_funds_statement_retrieve
+      parameters:
+      - in: path
+        name: fund_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /api/v1/ledger/integrity:
     get:
       operationId: api_v1_ledger_integrity_retrieve
@@ -2983,6 +3004,307 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CodeMessage'
+          description: ''
+  /api/v1/sponsorship/allocations:
+    get:
+      operationId: api_v1_sponsorship_allocations_retrieve
+      tags:
+      - sponsorship
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allocation'
+          description: ''
+    post:
+      operationId: api_v1_sponsorship_allocations_create
+      tags:
+      - sponsorship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllocationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AllocationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AllocationRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allocation'
+          description: ''
+  /api/v1/sponsorship/allocations/{allocation_id}/deactivate:
+    post:
+      operationId: api_v1_sponsorship_allocations_deactivate_create
+      parameters:
+      - in: path
+        name: allocation_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sponsorship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/sponsorship/allocations/bulk:
+    post:
+      operationId: api_v1_sponsorship_allocations_bulk_create
+      tags:
+      - sponsorship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/sponsorship/funds:
+    get:
+      operationId: api_v1_sponsorship_funds_list
+      tags:
+      - sponsorship
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SponsorFund'
+          description: ''
+    post:
+      operationId: api_v1_sponsorship_funds_create
+      tags:
+      - sponsorship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SponsorFundRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SponsorFundRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SponsorFundRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SponsorFund'
+          description: ''
+  /api/v1/sponsorship/funds/{fund_id}:
+    get:
+      operationId: api_v1_sponsorship_funds_retrieve
+      parameters:
+      - in: path
+        name: fund_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sponsorship
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SponsorFund'
+          description: ''
+    put:
+      operationId: api_v1_sponsorship_funds_update
+      parameters:
+      - in: path
+        name: fund_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sponsorship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SponsorFundRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SponsorFundRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SponsorFundRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SponsorFund'
+          description: ''
+  /api/v1/sponsorship/funds/{fund_id}/close:
+    post:
+      operationId: api_v1_sponsorship_funds_close_create
+      parameters:
+      - in: path
+        name: fund_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sponsorship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FundCloseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FundCloseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FundCloseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SponsorFund'
+          description: ''
+  /api/v1/sponsorship/funds/{fund_id}/contribute:
+    post:
+      operationId: api_v1_sponsorship_funds_contribute_create
+      parameters:
+      - in: path
+        name: fund_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sponsorship
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FundContributionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FundContributionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FundContributionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundContribution'
+          description: ''
+  /api/v1/sponsorship/funds/{fund_id}/dashboard:
+    get:
+      operationId: api_v1_sponsorship_funds_dashboard_retrieve
+      parameters:
+      - in: path
+        name: fund_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sponsorship
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/sponsorship/funds/{fund_id}/report:
+    get:
+      operationId: api_v1_sponsorship_funds_report_retrieve
+      parameters:
+      - in: path
+        name: fund_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sponsorship
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
           description: ''
   /api/v1/stock/:
     get:
@@ -5834,6 +6156,79 @@ components:
       description: |-
         * `activate` - activate
         * `deactivate` - deactivate
+    Allocation:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        meal_types: {}
+        daily_cap:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        per_meal_cap:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          type: string
+          format: date
+          nullable: true
+        priority:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - id
+      - valid_from
+    AllocationRequest:
+      type: object
+      properties:
+        fund_id:
+          type: integer
+          writeOnly: true
+        student_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        meal_types: {}
+        daily_cap:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        per_meal_cap:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          type: string
+          format: date
+          nullable: true
+        priority:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - fund_id
+      - student_id
+      - valid_from
     AuditLog:
       type: object
       properties:
@@ -6502,6 +6897,14 @@ components:
       description: |-
         * `debit` - Debit
         * `credit` - Credit
+    DispositionEnum:
+      enum:
+      - refund
+      - transfer
+      type: string
+      description: |-
+        * `refund` - refund
+        * `transfer` - transfer
     EndSessionRequestRequest:
       type: object
       properties:
@@ -6963,6 +7366,12 @@ components:
         password_set:
           type: boolean
           readOnly: true
+        sponsorships:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
       required:
       - id
       - parents
@@ -6970,7 +7379,68 @@ components:
       - rfid_card
       - school
       - school_id
+      - sponsorships
       - transactions
+    FundCloseRequest:
+      type: object
+      properties:
+        disposition:
+          $ref: '#/components/schemas/DispositionEnum'
+        target_fund_id:
+          type: integer
+        reason:
+          type: string
+          minLength: 1
+      required:
+      - disposition
+      - reason
+    FundContribution:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        method:
+          $ref: '#/components/schemas/MethodEnum'
+        reference:
+          type: string
+          maxLength: 150
+        received_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount
+      - created_at
+      - id
+      - method
+      - received_at
+    FundContributionRequest:
+      type: object
+      properties:
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        method:
+          $ref: '#/components/schemas/MethodEnum'
+        reference:
+          type: string
+          maxLength: 150
+        received_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - method
+      - received_at
     GenderEnum:
       enum:
       - M
@@ -7195,6 +7665,16 @@ components:
           type: string
       required:
       - message
+    MethodEnum:
+      enum:
+      - cash
+      - bank
+      - mobile_money
+      type: string
+      description: |-
+        * `cash` - Cash
+        * `bank` - Bank
+        * `mobile_money` - Mobile money
     ModeEnum:
       enum:
       - best_effort
@@ -8475,6 +8955,99 @@ components:
         * `breakfast` - Breakfast
         * `lunch` - Lunch
         * `dinner` - Dinner
+    SponsorFund:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        sponsor_name:
+          type: string
+          maxLength: 150
+        contact:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/SponsorFundStatusEnum'
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        alert_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+        balance:
+          type: string
+          readOnly: true
+        students_covered:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - balance
+      - created_at
+      - id
+      - name
+      - sponsor_name
+      - start_date
+      - students_covered
+    SponsorFundRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        sponsor_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        contact:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/SponsorFundStatusEnum'
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        alert_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          nullable: true
+      required:
+      - name
+      - sponsor_name
+      - start_date
+    SponsorFundStatusEnum:
+      enum:
+      - active
+      - paused
+      - closed
+      type: string
+      description: |-
+        * `active` - Active
+        * `paused` - Paused
+        * `closed` - Closed
     Staff:
       type: object
       properties:
@@ -8662,11 +9235,18 @@ components:
           $ref: '#/components/schemas/TransactionStatusEnum'
         scan_source:
           $ref: '#/components/schemas/ScanSourceEnum'
+        payment_breakdown:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
       required:
       - amount
       - card_number
       - id
       - item_name
+      - payment_breakdown
       - student_name
       - transaction_date
     TransactionListRequestRequest:

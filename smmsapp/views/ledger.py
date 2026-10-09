@@ -12,6 +12,7 @@ from drf_spectacular.utils import extend_schema
 from smmsapp.models import (
     JournalEntry, JournalLine, LedgerAccount, LedgerIntegrityRun,
     ParentStudent, RFIDCard,
+    SponsorFund,
 )
 from smmsapp.permissions.features import FeatureEnabled
 from smmsapp.permissions.roles import IsAdminOnly
@@ -117,6 +118,39 @@ class AccountStatementView(APIView, LedgerPagination):
         lines = JournalLine.objects.filter(account=account).select_related('entry', 'account', 'rfid_card').filter(**date_filters).order_by('-created_at')
         page = self.paginate_queryset(lines, request, view=self)
         return self.get_paginated_response(CardStatementLineSerializer(page, many=True).data)
+
+
+class FundStatementView(APIView, LedgerPagination):
+    permission_classes = [IsAdminOnly, FeatureEnabled('LEDGER_UI')]
+
+    @extend_schema(tags=['ledger'], responses=OpenApiTypes.OBJECT)
+    def get(self, request, fund_id):
+        fund = get_object_or_404(SponsorFund, pk=fund_id)
+        date_filters, error = _date_filters(request.query_params, 'created_at')
+        if error:
+            return error
+        base_lines = JournalLine.objects.filter(fund=fund, account__code='2200')
+        start = parse_date(request.query_params.get('from')) if request.query_params.get('from') else None
+        if start:
+            opening = base_lines.filter(created_at__date__lt=start).aggregate(
+                credits=Sum('amount', filter=Q(direction='credit')),
+                debits=Sum('amount', filter=Q(direction='debit')),
+            )
+            running = (opening['credits'] or 0) - (opening['debits'] or 0)
+        else:
+            running = 0
+        lines = base_lines.select_related('entry', 'account').filter(**date_filters).order_by('created_at', 'id')
+        rows = []
+        for line in lines:
+            running += line.amount if line.direction == 'credit' else -line.amount
+            rows.append({
+                'id': line.id, 'time': line.created_at, 'event': line.entry.event_type,
+                'memo': line.entry.memo, 'direction': line.direction,
+                'amount': line.amount, 'balance': running,
+                'reference': line.entry.idempotency_key,
+            })
+        page = self.paginate_queryset(list(reversed(rows)), request, view=self)
+        return self.get_paginated_response(page)
 
 
 class TrialBalanceView(APIView):

@@ -144,6 +144,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.check_low_stock",
         "schedule": crontab(hour=8, minute=0),
     },
+    "check-sponsor-funds": {
+        "task": "smmsapp.tasks.check_sponsor_funds",
+        "schedule": crontab(minute=0),
+    },
     "audit-purge": {
         "task": "smmsapp.tasks.audit_purge",
         "schedule": crontab(hour=2, minute=0),  # Daily 02:00
@@ -154,6 +158,7 @@ CELERY_BEAT_SCHEDULE = {
 DEFAULT_BALANCE_THRESHOLD = '1000.00'
 MENU_ENFORCED = os.getenv('MENU_ENFORCED', 'False') == 'True'
 STOCK_ENFORCED = os.getenv('STOCK_ENFORCED', 'False') == 'True'
+SPONSOR_FALLBACK_TO_WALLET = os.getenv('SPONSOR_FALLBACK_TO_WALLET', 'True').lower() == 'true'
 ANALYTICS_DEFAULT_RANGE_DAYS = int(os.getenv('ANALYTICS_DEFAULT_RANGE_DAYS', '30'))
 ANALYTICS_MAX_RANGE_DAYS = int(os.getenv('ANALYTICS_MAX_RANGE_DAYS', '366'))
 INSIGHT_REVERSAL_LIMIT = int(os.getenv('INSIGHT_REVERSAL_LIMIT', '10'))

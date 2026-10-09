@@ -106,12 +106,20 @@ class TransactionSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
     card_number = serializers.CharField(source='rfid_card.card_number', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
+    payment_breakdown = serializers.SerializerMethodField()
     class Meta:
         model =  Transaction
-        fields = ['id','amount','charged_amount','student_name', 'card_number','item_name','transaction_date','transaction_status','scan_source']
+        fields = ['id','amount','charged_amount','student_name', 'card_number','item_name','transaction_date','transaction_status','scan_source','payment_breakdown']
 
     def get_student_name(self, obj) -> str:
         return f'{obj.student_or_staff.first_name} {obj.student_or_staff.last_name}'
+
+    def get_payment_breakdown(self, obj) -> list[dict]:
+        return [{
+            'source': row.source,
+            'fund_name': row.fund.name if row.fund_id else None,
+            'amount': str(row.amount),
+        } for row in obj.payment_parts.select_related('fund').all()]
 
 
 # ---- SESSION INFO -----
@@ -152,11 +160,12 @@ class FullStudentSerializer(serializers.ModelSerializer):
     parents = serializers.SerializerMethodField()
     transactions = serializers.SerializerMethodField()
     password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
+    sponsorships = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = ['id','first_name','middle_name',  'last_name','gender', 'class_room',
-                  'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents', 'password_set']
+                  'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents', 'password_set', 'sponsorships']
 
     @extend_schema_field(RFIDCardSerializer(allow_null=True))
     def get_rfid_card(self, obj):
@@ -170,8 +179,22 @@ class FullStudentSerializer(serializers.ModelSerializer):
         
     @extend_schema_field(TransactionSerializer(many=True))
     def get_transactions(self, obj):
-        transactions = Transaction.objects.filter(student_or_staff=obj).order_by('-transaction_date')[:10]
+        transactions = Transaction.objects.filter(student_or_staff=obj).prefetch_related('payment_parts__fund').order_by('-transaction_date')[:10]
         return TransactionSerializer(transactions, many=True).data
+
+    def get_sponsorships(self, obj) -> list[dict]:
+        from django.utils import timezone
+        from smmsapp.models import SponsorshipAllocation
+        today = timezone.localdate()
+        allocations = SponsorshipAllocation.objects.filter(
+            student=obj, is_active=True, fund__status='active', valid_from__lte=today,
+        ).filter(Q(valid_to__isnull=True) | Q(valid_to__gte=today)).select_related('fund').order_by('priority')
+        return [{
+            'fund_name': row.fund.name,
+            'meal_types': row.meal_types,
+            'daily_cap': row.daily_cap,
+            'valid_to': row.valid_to,
+        } for row in allocations]
 
 
 # ----- FULL STAFF DETAILS -----

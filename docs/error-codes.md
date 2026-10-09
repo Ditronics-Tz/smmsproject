@@ -28,6 +28,12 @@ Error responses use a `code` (numeric for legacy codes, string for named contrac
 | `CHILD_NOT_LINKED` | The requested child is not linked to the authenticated parent. | 403 |
 | `PARENT_REQUIRED` | Only a parent can manage child spending controls. | 403 |
 | `OUT_OF_STOCK` | The item has no remaining inventory while stock enforcement is enabled. | 409 |
+| `SPONSOR_FUNDS_EXHAUSTED` | Eligible sponsor allocations cannot cover the meal and wallet fallback is disabled. | 409 |
+| `FUND_CLOSED` | A closed sponsor fund cannot be changed or closed again. | 409 |
+| `FUND_NOT_ACTIVE` | The fund must be active for contributions, allocations, or a transfer target. | 409 |
+| `ALLOCATION_OVERLAP` | This student already has an active allocation from the same fund. | 409 |
+| `ALLOCATION_INACTIVE` | The allocation was already deactivated. | 409 |
+| `PDF_EXPORT_UNAVAILABLE` | PDF rendering is unavailable on this server. | 501 |
 | `STOCK_ADJUSTMENT_NEGATIVE` | The adjustment would make an inventory quantity negative. | 400 |
 | `INVALID_DATE_RANGE` | Analytics `from`/`to` dates are malformed, reversed, or span too many days. | 400 |
 | `INSIGHT_ALREADY_RESOLVED` | The anomaly has already been resolved. | 409 |

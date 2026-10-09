@@ -11,6 +11,7 @@ urlpatterns = [
     path('ledger/', include('smmsapp.urls.ledger')),
     path('preorders/', include('smmsapp.urls.preorders')),
     path('stock/', include('smmsapp.urls.stock')),
+    path('sponsorship/', include('smmsapp.urls.sponsorship')),
     path('resources/', include('smmsapp.urls.resources')),
     path('sessions/', include('smmsapp.urls.sessions')),
     path('list/', include('smmsapp.urls.lists')),

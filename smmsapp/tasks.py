@@ -170,6 +170,45 @@ def check_low_stock():
 
 
 @shared_task
+def check_sponsor_funds():
+    """Send deduplicated low/empty/end-date fund alerts once per day."""
+    from datetime import timedelta
+    from decimal import Decimal
+    from django.db.models import Q, Sum
+    from django.utils import timezone
+    from .models import InsightFlag, JournalLine, Notification, SponsorFund, CustomUser
+    from .views.sponsorship import _fund_balance
+
+    today = timezone.localdate()
+    admins = CustomUser.objects.filter(role='admin', is_active=True)
+    count = 0
+    for fund in SponsorFund.objects.filter(status__in=['active', 'paused']):
+        balance = _fund_balance(fund)
+        events = []
+        if balance <= 0:
+            events.append(('empty', 'Sponsor fund is empty.'))
+            InsightFlag.objects.get_or_create(
+                kind='fund_empty', reference_type='fund', reference_id=str(fund.pk),
+                defaults={'detail': {'fund_id': fund.pk, 'fund_name': fund.name, 'balance': str(balance)}},
+            )
+        elif fund.alert_threshold is not None and balance <= fund.alert_threshold:
+            events.append(('low', f'Balance {balance:.2f} is at or below threshold {fund.alert_threshold:.2f}.'))
+        if fund.end_date and today < fund.end_date <= today + timedelta(days=7):
+            events.append(('ending', f'Fund validity ends on {fund.end_date}.'))
+        for event, detail in events:
+            for admin in admins:
+                _, created = Notification.objects.get_or_create(
+                    recipient=admin, dedupe_key=f'sponsor-fund:{fund.pk}:{event}:{today.isoformat()}',
+                    defaults={
+                        'title': f'Sponsor fund {event}: {fund.name}',
+                        'message': f'{fund.name}: {detail}', 'type': 'reminder', 'status': 'pending',
+                    },
+                )
+                count += int(created)
+    return count
+
+
+@shared_task
 def audit_purge():
     from datetime import timedelta
     from django.conf import settings

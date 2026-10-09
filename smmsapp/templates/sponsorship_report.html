@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ fund_name }} report</title>
+  <style>
+    body { font: 12px sans-serif; color: #1b2630; }
+    h1 { color: #174b36; }
+    table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+    th, td { border: 1px solid #cbd5d1; padding: 6px; text-align: left; }
+    th { background: #edf4ef; }
+  </style>
+</head>
+<body>
+  <h1>{{ app_name }} — Sponsor report</h1>
+  <p><strong>Fund:</strong> {{ fund_name }} | <strong>Period:</strong> {{ from_date }} – {{ to_date }}</p>
+  <p><strong>Students covered:</strong> {{ totals.students_covered }} |
+     <strong>Meals:</strong> {{ totals.meals }} |
+     <strong>Sponsored total:</strong> {{ totals.amount }}</p>
+  <table>
+    <thead><tr><th>Student</th><th>Class</th><th>Meals</th><th>Amount</th></tr></thead>
+    <tbody>{% for row in students %}
+      <tr><td>{{ row.student }}</td><td>{{ row.class_room }}</td><td>{{ row.meals }}</td><td>{{ row.amount }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+</body>
+</html>

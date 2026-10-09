@@ -177,6 +177,8 @@ class StudentDetailView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         student = get_object_or_404(CustomUser, id=student_id, role = 'student')
+        if request.user.role == 'parent' and not ParentStudent.objects.filter(parent=request.user, student=student).exists():
+            return Response({'code': 'FORBIDDEN', 'message': 'You may only view your own linked child.'}, status=status.HTTP_403_FORBIDDEN)
         serializer = FullStudentSerializer(student)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
