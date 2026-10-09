@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated
 from django.db.models import Q
 from django.db import transaction
 from django.utils import timezone
@@ -14,7 +14,7 @@ from drf_spectacular.utils import extend_schema
 from ..serializers import *
 from ..serializers.system import CodeMessageSerializer
 from ..models import *
-from ..permissions.roles import IsAdminOrParent, IsAdminOnly
+from ..permissions.roles import IsAdminParentOrStaff, IsAdminOnly
 from ..permissions.features import FeatureEnabled
 from ..services.cards import create_card_with_control_number, generate_control_number
 
@@ -48,13 +48,13 @@ class SchoolListView(APIView, PageNumberPagination):
 class CreateSchoolView(generics.CreateAPIView):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOnly]
 
 
 # ---- API FOR DELETE SCHOOL -----
 @extend_schema(tags=['resources'], request=SchoolIdRequestSerializer, responses=CodeMessageSerializer)
 class DeleteSchoolView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
     def post(self, request, *args, **kwargs):
         try:
             # Get school ID from request body
@@ -161,7 +161,7 @@ class InactiveUserListView(APIView, PageNumberPagination):
 # ----- API FOR FETCH STUDENT DATA -----
 @extend_schema(tags=['resources'], request=StudentIdRequestSerializer, responses={200: FullStudentSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class StudentDetailView(APIView):
-    permission_classes = [IsAdminOrParent]
+    permission_classes = [IsAdminParentOrStaff]
 
     def post(self, request, *args, **kwargs):
         if not request.user.is_authenticated or request.user.role not in ['admin','parent']:
@@ -276,7 +276,7 @@ class OperatorDetailView(APIView):
 class AdminDetailsView(generics.RetrieveAPIView):
     queryset = CustomUser.objects.filter(role='admin')
     serializer_class = FullAdminSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
 
     def post(self, request, *args, **kwags):
         if not request.user.is_authenticated or request.user.role != 'admin':
@@ -389,7 +389,7 @@ class DeleteItemView(APIView):
 class CreateItemView(generics.CreateAPIView):
     queryset = CanteenItem.objects.all()
     serializer_class = CanteenItemSerializer
-    permission_classes = [IsAuthenticated, FeatureEnabled('MENU')]
+    permission_classes = [IsAdminOnly, FeatureEnabled('MENU')]
 
 
 # ----- API EDIT ITEM -----
@@ -619,7 +619,7 @@ class DeleteCardView(APIView):
 # ---- API FOR GET CARD LIST
 @extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=RFIDCardSerializer(many=True))
 class CardListView(APIView, PageNumberPagination):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
     page_size = 50
 
     def post(self, request, *args, **kwargs):
@@ -901,7 +901,7 @@ class NotificationListView(APIView):
 # ---- API FOR RETURN ALL NOTIFICATIONS -----
 @extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=NotificationSerializer(many=True))
 class AllNotificationsView(APIView, PageNumberPagination):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
     page_size = 50
 
     def post(self, request, *args, **kwargs):

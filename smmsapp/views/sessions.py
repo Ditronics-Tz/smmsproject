@@ -16,7 +16,7 @@ from ..serializers.sessions import (
 from drf_spectacular.utils import extend_schema
 from ..serializers.system import CodeMessageSerializer
 from django.utils import timezone
-from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminOrParent, IsAdminOnly
+from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminParentOrStaff, IsAdminOnly
 from ..services.audit import log_action, snapshot
 from ..utils import get_admin_scope
 from ..services.cards import normalize_uid
@@ -543,7 +543,7 @@ class ScannedDataListView(APIView, PageNumberPagination):
 @extend_schema(tags=['sessions'], request=TransactionListRequestSerializer,
     responses={200: TransactionSerializer(many=True), 403: CodeMessageSerializer})
 class TransactionListView(APIView, PageNumberPagination):
-    permission_classes = [IsAdminOrParent]
+    permission_classes = [IsAdminParentOrStaff]
     page_size = 50
 
     def post(self, request, *args, **kwargs):

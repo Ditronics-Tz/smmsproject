@@ -29,7 +29,7 @@ from ..serializers.auth import (
 )
 from ..models import CustomUser as User, RFIDCard, Notification, PasswordResetToken
 from ..services.sms import get_sms_provider, normalize_tz_phone
-from ..permissions.roles import IsAdminOnly, IsAdminOrParent
+from ..permissions.roles import IsAdminOnly, IsAdminParentOrStaff
 from ..services.audit import log_action, snapshot
 
 # Generate JWT tokens for user

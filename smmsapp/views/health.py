@@ -2,7 +2,8 @@ from django.db import connection
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny
+from ..permissions.roles import IsAdminOnly
 from drf_spectacular.utils import extend_schema
 from rest_framework import status as http_status
 import time
@@ -23,7 +24,7 @@ class HealthView(APIView):
 @extend_schema(tags=['health'], responses={200: StatusSerializer, 503: StatusSerializer})
 class StatusView(APIView):
     """Dependency checks - staff only. Do NOT use for LB probe."""
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
 
     def get(self, request):
         checks = {}

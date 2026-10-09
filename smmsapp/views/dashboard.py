@@ -4,14 +4,14 @@ from django.utils.timezone import now, timedelta
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
-from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated
 
 from ..serializers.resources import FullStudentSerializer, StudentSerializer, FullStaffSerializer
 
 from ..utils import generate_end_of_day_report, generate_parent_end_of_day_report, get_admin_scope
 from ..models import ParentStudent, RFIDCard, Transaction, CustomUser, ScanSession, ScannedData, CanteenItem
 from ..serializers.dashboard import *
-from ..permissions.roles import IsAdminOrParent, IsAdminOnly, IsOperator, IsAdminOrOperator
+from ..permissions.roles import IsAdminParentOrStaff, IsAdminOnly, IsOperator, IsAdminOrOperator
 from ..permissions.features import FeatureEnabled
 from ..serializers.system import CodeMessageSerializer
 from drf_spectacular.types import OpenApiTypes
@@ -166,7 +166,7 @@ class WeeklySalesTrendView(APIView):
 )
 class EndOfDayReportView(APIView):
     """Generate and download End-of-Day report"""
-    permission_classes = [IsAdminOrParent, FeatureEnabled('ANALYTICS')]  # Only Admins can access
+    permission_classes = [IsAdminParentOrStaff, FeatureEnabled('ANALYTICS')]
 
     def get(self, request):
         pdf_buffer = None
@@ -265,7 +265,7 @@ class OperatorScanAnalyticsView(APIView):
     tags=['dashboard'], request=None,
     responses={200: FullStudentSerializer(many=True), 403: CodeMessageSerializer})
 class ParentStudentsView(APIView):
-    permission_classes = [IsAdminOrParent]
+    permission_classes = [IsAdminParentOrStaff]
 
     def post(self, request):
         # Ensure user is a parent
@@ -289,7 +289,7 @@ class ParentStudentsView(APIView):
 class ChildSpendView(APIView):
     """Return aggregated spend per child for the current week or month,
     broken down per item. Parents only see their own children."""
-    permission_classes = [IsAdminOrParent]
+    permission_classes = [IsAdminParentOrStaff]
 
     def post(self, request):
         if request.user.role != "parent":
@@ -370,7 +370,7 @@ class ChildSpendView(APIView):
     tags=['dashboard'], request=None,
     responses={200: FullStaffSerializer, 403: CodeMessageSerializer})
 class StaffView(APIView):
-    permission_classes = [IsAdminOrParent]
+    permission_classes = [IsAdminParentOrStaff]
 
     def post(self, request):
         # Ensure user is a staff

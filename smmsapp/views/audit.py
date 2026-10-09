@@ -1,5 +1,5 @@
 from rest_framework import generics
-from rest_framework.permissions import IsAdminUser
+from ..permissions.roles import IsAdminOnly
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from ..models import AuditLog
@@ -9,7 +9,7 @@ from drf_spectacular.utils import extend_schema
 @extend_schema(tags=['audit'])
 class AuditLogListView(generics.ListAPIView):
     serializer_class = AuditLogSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['action','actor']
     ordering_fields = ['timestamp']

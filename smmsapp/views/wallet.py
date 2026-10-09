@@ -18,7 +18,7 @@ from ..models import (
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 from ..serializers.system import CodeMessageSerializer
 from ..serializers.resources import TransactionSerializer
-from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminOrParent, IsAdminOperatorOrParent
+from ..permissions.roles import IsAdminOnly, IsOperator, IsAdminOrOperator, IsAdminParentOrStaff, IsAdminOperatorOrParent
 from ..permissions.features import FeatureEnabled
 from ..services.audit import log_action, snapshot
 from ..serializers.wallet import (
@@ -37,7 +37,7 @@ from ..serializers.wallet import (
     responses={201: BankDepositSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class CreateDepositView(APIView):
     """Parent submits a top-up deposit request for one of their children's cards."""
-    permission_classes = [IsAdminOrParent, FeatureEnabled('PAYMENTS')]
+    permission_classes = [IsAdminParentOrStaff, FeatureEnabled('PAYMENTS')]
 
     def post(self, request):
         user = request.user

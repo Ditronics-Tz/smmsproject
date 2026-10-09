@@ -126,12 +126,7 @@ class ScanCardParentNotificationTests(Phase6ScanCardBase):
 
 
 class DenyResponseMessageKeyTests(Phase6ScanCardBase):
-    """Deny responses use the correct 'message' key, not the 'messsage' typo.
-
-    AdminDetailsView is gated by DRF's IsAdminUser (is_staff), so a staff
-    member whose role is not 'admin' passes the permission gate and reaches
-    the view body that builds the deny response.
-    """
+    """Admin-only endpoints use the application role, not the is_staff bit."""
 
     @classmethod
     def setUpTestData(cls):
@@ -141,9 +136,7 @@ class DenyResponseMessageKeyTests(Phase6ScanCardBase):
             is_staff=True, school=cls.school,
         )
 
-    def test_admin_details_deny_uses_message_key(self):
+    def test_staff_without_admin_role_cannot_access_admin_details(self):
         self.api.force_authenticate(user=self.staff_non_admin)
         response = self.api.post("/resources/admin-details", {})
         self.assertEqual(response.status_code, 403)
-        self.assertIn("message", response.data)
-        self.assertNotIn("messsage", response.data)

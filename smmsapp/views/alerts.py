@@ -5,7 +5,7 @@ from django.db import transaction
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
-from ..permissions.roles import IsAdminOrParent
+from ..permissions.roles import IsAdminParentOrStaff
 from ..permissions.features import FeatureEnabled
 from ..serializers.alerts import BalanceThresholdSerializer, ParentControlsSerializer
 from ..serializers.system import CodeMessageSerializer
@@ -25,7 +25,7 @@ class BalanceThresholdView(APIView):
     GET returns the effective threshold (explicit value or system default).
     PUT accepts balance_threshold (decimal) or null to reset to the default.
     """
-    permission_classes = [IsAdminOrParent, FeatureEnabled('PARENT_LIMITS')]
+    permission_classes = [IsAdminParentOrStaff, FeatureEnabled('PARENT_LIMITS')]
 
     def _enforce_parent(self, request):
         if request.user.role != 'parent':
@@ -80,7 +80,7 @@ class BalanceThresholdView(APIView):
 )
 class ParentControlsView(APIView):
     """Read and replace a parent's daily cap and blocked-item list for a child."""
-    permission_classes = [IsAdminOrParent, FeatureEnabled('PARENT_LIMITS')]
+    permission_classes = [IsAdminParentOrStaff, FeatureEnabled('PARENT_LIMITS')]
 
     def _child_for_parent(self, request, child_id):
         if request.user.role != 'parent':

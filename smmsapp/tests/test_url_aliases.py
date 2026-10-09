@@ -24,8 +24,8 @@ class TrailingSlashAliasTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.school = School.objects.create(name="Alias School", location="Dodoma")
-        # is_staff is required here: /status, /audit/logs and /sms/logs are all
-        # guarded by DRF's IsAdminUser, not by the role-based permissions.
+        # Admin-only API access is governed by the application role, not by
+        # the Django is_staff bit.
         cls.admin = User.objects.create_user(
             username="aliasadmin", password="Passw0rd!123", role="admin",
             is_staff=True, school=cls.school, first_name="Ali",

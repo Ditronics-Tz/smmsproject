@@ -1,10 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, generics
 from drf_spectacular.utils import extend_schema
 from django_filters.rest_framework import DjangoFilterBackend
 from ..models import SMSLog
+from ..permissions.roles import IsAdminOnly
 from ..serializers.sms import (
     SMSLogSerializer, SMSOptOutRequestSerializer, SMSOptOutSerializer,
 )
@@ -33,7 +34,7 @@ class SMSOptOutView(APIView):
 @extend_schema(tags=['sms'])
 class SMSLogListView(generics.ListAPIView):
     serializer_class = SMSLogSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["status", "provider"]
     ordering = ["-created_at"]
