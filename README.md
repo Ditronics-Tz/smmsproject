@@ -67,10 +67,17 @@ server {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # This single trusted Nginx edge overwrites any client-supplied value.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
+Set `NUM_PROXIES=1` in `.env` for this topology. If requests pass through
+multiple trusted proxies, configure each proxy to preserve the verified chain
+and set `NUM_PROXIES` to the count represented in `X-Forwarded-For`. Never set
+it above zero when clients can reach Django directly or inject forwarding
+headers unless the trusted edge overwrites them before forwarding.
 Enable the config and restart Nginx:
 ```bash
 sudo ln -s /etc/nginx/sites-available/student_meal /etc/nginx/sites-enabled/

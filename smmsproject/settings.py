@@ -58,6 +58,7 @@ SECRET_KEY = require_env('SECRET_KEY')
 # Fail-safe: DEBUG defaults to False. A missing/unset DEBUG env var must NOT
 # silently enable debug mode. Dev environments set DEBUG=True explicitly.
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
+NUM_PROXIES = int(os.getenv('NUM_PROXIES', '0'))
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -286,6 +287,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'NUM_PROXIES': NUM_PROXIES,
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 5,
     'DEFAULT_THROTTLE_CLASSES': [
