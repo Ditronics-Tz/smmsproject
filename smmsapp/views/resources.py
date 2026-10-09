@@ -719,6 +719,28 @@ class ActivateDeactivateCardView(APIView):
             return Response({"code": 500, "message": f"General System error - {e}"})
 
 
+@extend_schema(tags=['resources'], request=ResetStrikesSerializer, responses={200: RFIDCardSerializer, 400: CodeMessageSerializer, 404: CodeMessageSerializer})
+class ResetCardStrikesView(APIView):
+    permission_classes = [IsAdminOnly]
+
+    def post(self, request):
+        serializer = ResetStrikesSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            card = get_object_or_404(
+                RFIDCard.objects.select_for_update().select_related('student_or_staff'),
+                pk=serializer.validated_data['card_id'],
+            )
+            before = snapshot(card)
+            card.insufficient_meal_count = 0
+            card.save(update_fields=['insufficient_meal_count', 'updated_at'])
+            after = snapshot(card)
+            after['reset_reason'] = serializer.validated_data['reason'].strip()
+            log_action('update', obj=card, before=before, after=after, actor=request.user, request=request)
+        return Response(RFIDCardSerializer(card).data, status=status.HTTP_200_OK)
+
+
 # ---- API TO REPLACE A LOST/DAMAGED CARD -----
 @extend_schema(tags=['resources'])
 class ReplaceCardView(APIView):

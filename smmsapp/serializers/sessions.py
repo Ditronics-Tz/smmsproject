@@ -102,10 +102,13 @@ class ScannedDataSerializer(serializers.ModelSerializer):
     card_number = serializers.CharField(source="rfid_card.card_number", read_only=True)
     preorder_fulfilled = serializers.SerializerMethodField()
     payment_breakdown = serializers.SerializerMethodField()
+    insufficient_meal_count = serializers.IntegerField(source='rfid_card.insufficient_meal_count', read_only=True)
+    strike_limit = serializers.SerializerMethodField()
 
     class Meta:
         model = ScannedData
-        fields = ['id', 'session', 'student_name', 'card_number', 'item_name', 'item_price', 'scanned_at', 'scan_source', 'preorder_fulfilled', 'payment_breakdown']
+        fields = ['id', 'session', 'student_name', 'card_number', 'item_name', 'item_price', 'scanned_at',
+                  'scan_source', 'preorder_fulfilled', 'payment_breakdown', 'insufficient_meal_count', 'strike_limit']
         read_only_fields = ['id', 'scanned_at']
 
     def get_student_name(self, obj) -> str:
@@ -116,6 +119,10 @@ class ScannedDataSerializer(serializers.ModelSerializer):
 
     def get_payment_breakdown(self, obj) -> list:
         return getattr(obj, '_payment_breakdown', [])
+
+    def get_strike_limit(self, obj) -> int:
+        from django.conf import settings
+        return settings.STRIKE_LIMIT
     
 
 # ------ TRANSACTION SERIALIZER -----

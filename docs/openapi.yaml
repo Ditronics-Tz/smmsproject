@@ -2557,6 +2557,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReplaceCard'
           description: ''
+  /api/v1/resources/reset-strikes:
+    post:
+      operationId: api_v1_resources_reset_strikes_create
+      tags:
+      - resources
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetStrikesRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResetStrikesRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResetStrikesRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFIDCard'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
   /api/v1/resources/school-list/:
     post:
       operationId: api_v1_resources_school_list_create
@@ -5775,6 +5813,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReplaceCard'
           description: ''
+  /resources/reset-strikes:
+    post:
+      operationId: resources_reset_strikes_create
+      tags:
+      - resources
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetStrikesRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResetStrikesRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResetStrikesRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RFIDCard'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
   /resources/school-list/:
     post:
       operationId: resources_school_list_create
@@ -7774,14 +7850,22 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        insufficient_meal_count:
+          type: integer
+          readOnly: true
+        strike_limit:
+          type: integer
+          readOnly: true
       required:
       - id
+      - insufficient_meal_count
       - parents
       - password_set
       - rfid_card
       - school
       - school_id
       - sponsorships
+      - strike_limit
       - transactions
     FundCloseRequest:
       type: object
@@ -9057,6 +9141,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/User'
           readOnly: true
+        insufficient_meal_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        strike_limit:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -9066,6 +9157,7 @@ components:
       - control_number
       - created_at
       - id
+      - strike_limit
       - student_or_staff
     ReplaceCard:
       type: object
@@ -9121,6 +9213,19 @@ components:
           format: uri
       required:
       - message
+    ResetStrikesRequest:
+      type: object
+      properties:
+        card_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+      required:
+      - card_id
+      - reason
     ResolveInsightRequest:
       type: object
       properties:
@@ -9411,15 +9516,23 @@ components:
           type: array
           items: {}
           readOnly: true
+        insufficient_meal_count:
+          type: integer
+          readOnly: true
+        strike_limit:
+          type: integer
+          readOnly: true
       required:
       - card_number
       - id
+      - insufficient_meal_count
       - item_name
       - item_price
       - payment_breakdown
       - preorder_fulfilled
       - scanned_at
       - session
+      - strike_limit
       - student_name
     ScannedDataRequest:
       type: object

@@ -14,6 +14,7 @@ general substitute for the admin role.
 | `/integrations/v1/admin/*` key/webhook/sync-log management | Allow | Deny | Deny | Deny | Deny | Deny |
 | `/integrations/v1/{students,parents,classes}/sync` | Integration key only | Deny | Deny | Deny | Deny | Deny |
 | `/api/v1/wallet/statement.pdf` | Allow within admin scope | Deny | Own linked children only | Deny | Deny | Deny |
+| `/api/v1/resources/reset-strikes` | Allow | Deny | Deny | Deny | Deny | Deny |
 
 Integration routes also require the `INTEGRATIONS` feature; sync routes additionally
 require a valid, active API key issued to an administrator in that school.

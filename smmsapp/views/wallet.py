@@ -184,7 +184,7 @@ class ProcessDepositView(APIView):
                         'message': f'Deposit already {deposit.status}; no action taken',
                     }, status=status.HTTP_409_CONFLICT)
                 rfid_card = RFIDCard.objects.select_for_update().get(
-                    control_number=deposit.control_number
+                    control_number=deposit.control_number_id
                 )
                 old_balance = rfid_card.balance
                 rfid_card.balance += deposit.amount

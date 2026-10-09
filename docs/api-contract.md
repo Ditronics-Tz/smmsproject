@@ -33,6 +33,15 @@ platform-owner account; this field is write-only and is never accepted from a
 regular administrator. `python manage.py list_admins_without_school` reports
 legacy schoolless admin accounts without modifying them.
 
+## Strike counters
+
+Scan, card-detail, and student-detail responses expose `insufficient_meal_count`
+and `strike_limit`. Penalty reversals reduce the counter by one; ordinary
+reversals do not. Deposits keep the counter unless
+`STRIKE_RESET_ON_DEPOSIT=True`. Admins reset a counter with
+`POST /api/v1/resources/reset-strikes` and `{ "card_id": "<UUID>", "reason": "..." }`;
+the reset is audited with before/after state and reason.
+
 ## Error responses
 
 Errors use the existing numeric `code` and human-readable `message` response fields. Documented codes and meanings are listed in [error-codes.md](error-codes.md). Throttled requests return HTTP 429.

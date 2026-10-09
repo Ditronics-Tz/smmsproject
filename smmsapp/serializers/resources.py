@@ -2,6 +2,11 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 
 
+class ResetStrikesSerializer(serializers.Serializer):
+    card_id = serializers.UUIDField()
+    reason = serializers.CharField(max_length=500, allow_blank=False, trim_whitespace=True)
+
+
 # ---- SHARED REQUEST BODIES FOR THE APIView ENDPOINTS ----
 class SearchRequestSerializer(serializers.Serializer):
     search = serializers.CharField(required=False, allow_blank=True, default='')
@@ -138,9 +143,16 @@ class ScanSessionSerializer(serializers.ModelSerializer):
 # ------ RFID Card INFO -----
 class RFIDCardSerializer(serializers.ModelSerializer):
     student_or_staff = UserSerializer(read_only=True)
+    strike_limit = serializers.SerializerMethodField()
+
+    def get_strike_limit(self, obj) -> int:
+        from django.conf import settings
+        return settings.STRIKE_LIMIT
+
     class Meta:
         model = RFIDCard
-        fields = ['id','balance', 'is_active','control_number','card_number','uid_hex','issued_date','student_or_staff', 'created_at']
+        fields = ['id','balance', 'is_active','control_number','card_number','uid_hex','issued_date',
+                  'student_or_staff', 'insufficient_meal_count', 'strike_limit', 'created_at']
 
 
 # ----- ITEM INFO ----
@@ -159,11 +171,22 @@ class FullStudentSerializer(serializers.ModelSerializer):
     transactions = serializers.SerializerMethodField()
     password_set = serializers.BooleanField(source='has_usable_password', read_only=True)
     sponsorships = serializers.SerializerMethodField()
+    insufficient_meal_count = serializers.SerializerMethodField()
+    strike_limit = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = ['id','first_name','middle_name',  'last_name','gender', 'class_room',
-                  'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents', 'password_set', 'sponsorships']
+                  'school', 'school_id','profile_picture','transactions', 'rfid_card', 'parents', 'password_set',
+                  'sponsorships', 'insufficient_meal_count', 'strike_limit']
+
+    def get_insufficient_meal_count(self, obj) -> int:
+        card = obj.rfid_cards.filter(is_active=True).order_by('-created_at').first()
+        return card.insufficient_meal_count if card else 0
+
+    def get_strike_limit(self, obj) -> int:
+        from django.conf import settings
+        return settings.STRIKE_LIMIT
 
     @extend_schema_field(RFIDCardSerializer(allow_null=True))
     def get_rfid_card(self, obj):
