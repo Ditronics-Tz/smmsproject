@@ -1,4 +1,5 @@
 from datetime import timedelta
+from datetime import date
 from decimal import Decimal
 import random
 from unittest.mock import patch
@@ -6,7 +7,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import transaction
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -14,9 +15,31 @@ from smmsapp.models import (CanteenItem, DailyMenu, DailyMenuItem, FeatureFlag,
     JournalEntry, ParentStudent, PreOrder, PreOrderItem, RFIDCard, School,
     ScanSession, Transaction)
 from smmsapp.services.ledger import check_ledger_integrity, post_opening
-from smmsapp.services.preorders import cutoff_for, fulfil_preorder_item, place_preorder, release_preorder
+from smmsapp.services.preorders import (
+    cutoff_for, fulfil_preorder_item, place_preorder, preorder_notification_content,
+    release_preorder,
+)
 
 User = get_user_model()
+
+
+class PreOrderNotificationTemplateTests(SimpleTestCase):
+    def setUp(self):
+        self.order = type('OrderStub', (), {'date': date(2026, 10, 10)})()
+
+    @override_settings(APP_LOCALE='en-TZ')
+    def test_english_no_show_includes_return_amount(self):
+        title, message = preorder_notification_content(self.order, 'no_show', Decimal('125.50'))
+        self.assertEqual(title, 'Pre-order not served')
+        self.assertIn('Amount returned: TZS 125.50', message)
+
+    @override_settings(APP_LOCALE='sw-TZ')
+    def test_swahili_order_and_fulfilment_templates_are_available(self):
+        title, message = preorder_notification_content(self.order, 'placed')
+        self.assertEqual(title, 'Oda imepokelewa')
+        self.assertIn('imepokelewa', message)
+        self.assertIn('imetimizwa', preorder_notification_content(self.order, 'fulfilled')[1])
+
 
 
 @override_settings(PREORDER_CUTOFF_TIME='23:59', PREORDER_MAX_QTY_PER_ITEM=1)

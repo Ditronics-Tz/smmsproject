@@ -185,7 +185,7 @@ class ScanRFIDCardView(APIView):
                         preorder.refresh_from_db(fields=['status'])
                         if preorder.status == 'fulfilled':
                             from ..services.preorders import notify_preorder
-                            notify_preorder(preorder, 'fulfilled', f'The pre-order for {preorder.date} was fully served.')
+                            notify_preorder(preorder, 'fulfilled')
                         return Response(
                             ScannedDataSerializer(scanned_data, context={'scan_status': 'success'}).data,
                             status=status.HTTP_201_CREATED,

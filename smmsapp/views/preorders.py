@@ -119,7 +119,7 @@ class PreOrderCreateView(APIView):
                 return Response({'code': 'PREORDER_CONFLICT', 'detail': 'Order could not be placed.'}, status=409)
             return Response(PreOrderSerializer(preorder).data, status=409)
         log_action('create', obj=preorder, after=snapshot(preorder), actor=request.user, request=request)
-        notify_preorder(preorder, 'placed', f'Pre-order for {day} was placed.')
+        notify_preorder(preorder, 'placed')
         return Response(PreOrderSerializer(preorder).data, status=201)
 
 

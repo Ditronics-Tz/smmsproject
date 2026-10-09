@@ -18,12 +18,37 @@ def cutoff_for(order_date):
     return timezone.make_aware(datetime.combine(local_day, time(hour, minute)), zone)
 
 
-def notify_preorder(preorder, event, message):
+def preorder_notification_content(preorder, event, amount_returned=None):
+    """Return an English or Kiswahili template selected by deployment locale."""
+    day = preorder.date.isoformat()
+    returned = Decimal(amount_returned or 0)
+    templates = {
+        'en': {
+            'placed': ('Pre-order placed', f'Pre-order for {day} was placed.'),
+            'cancelled': ('Pre-order cancelled', f'Pre-order for {day} was cancelled. Amount returned: TZS {returned:.2f}.'),
+            'fulfilled': ('Pre-order fulfilled', f'The pre-order for {day} was fully served.'),
+            'no_show': ('Pre-order not served', f'Pre-order for {day} was not served. Amount returned: TZS {returned:.2f}.'),
+            'expired': ('Pre-order expired', f'Pre-order for {day} expired. Amount returned: TZS {returned:.2f}.'),
+        },
+        'sw': {
+            'placed': ('Oda imepokelewa', f'Oda ya chakula ya tarehe {day} imepokelewa.'),
+            'cancelled': ('Oda imeghairiwa', f'Oda ya tarehe {day} imeghairiwa. Kiasi kilichorejeshwa: TZS {returned:.2f}.'),
+            'fulfilled': ('Oda imetimizwa', f'Oda ya chakula ya tarehe {day} imetimizwa.'),
+            'no_show': ('Oda haikutumika', f'Oda ya tarehe {day} haikutumika. Kiasi kilichorejeshwa: TZS {returned:.2f}.'),
+            'expired': ('Oda imekwisha muda', f'Oda ya tarehe {day} imekwisha muda. Kiasi kilichorejeshwa: TZS {returned:.2f}.'),
+        },
+    }
+    language = 'sw' if str(getattr(settings, 'APP_LOCALE', 'en-TZ')).lower().startswith('sw') else 'en'
+    return templates[language].get(event, templates[language]['placed'])
+
+
+def notify_preorder(preorder, event, amount_returned=None):
     from smmsapp.models import Notification, ParentStudent
+    title, message = preorder_notification_content(preorder, event, amount_returned)
     for link in ParentStudent.objects.filter(student=preorder.student).select_related('parent'):
         notification, created = Notification.objects.get_or_create(
             recipient=link.parent, dedupe_key=f'preorder:{preorder.id}:{event}',
-            defaults={'title': f'Pre-order {event.replace("_", " ")}', 'message': message, 'type': 'message'},
+            defaults={'title': title, 'message': message, 'type': 'message'},
         )
         if created:
             def send_sms_after_commit(recipient=link.parent, body=message, pending_notification=notification):
@@ -97,7 +122,7 @@ def release_preorder(preorder, *, status_value='cancelled', actor=None, fee=Deci
     preorder.cancelled_at = timezone.now() if status_value == 'cancelled' else None
     preorder.save(update_fields=['status', 'cancelled_at'])
     returned = remaining - fee
-    notify_preorder(preorder, status_value, f'Pre-order for {preorder.date} was {status_value.replace("_", " ")}. Amount returned: {returned:.2f}.')
+    notify_preorder(preorder, status_value, returned)
     return preorder
 
 
