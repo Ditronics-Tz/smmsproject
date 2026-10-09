@@ -240,6 +240,49 @@ class PreOrderServiceTests(TestCase):
         self.assertEqual(self.card.held_balance, Decimal('0.00'))
         self.assertFalse(self.card.is_active)
 
+    def test_replaced_order_is_fulfilled_by_scanning_the_new_active_card(self):
+        with transaction.atomic():
+            post_opening(self.card)
+        order = PreOrder.objects.create(
+            student=self.student, card=self.card, date=timezone.localdate(), meal_type='lunch',
+            status='placed', total_amount=Decimal('200.00'), cutoff_at=timezone.now() + timedelta(hours=1),
+            idempotency_key='replacement-scan-order', created_by=self.parent,
+        )
+        PreOrderItem.objects.create(preorder=order, item=self.item, quantity=1, unit_price=Decimal('200.00'))
+        self.card.balance = Decimal('800.00')
+        self.card.held_balance = Decimal('200.00')
+        self.card.save(update_fields=['balance', 'held_balance'])
+        from smmsapp.services.ledger import post_preorder_hold
+        with transaction.atomic():
+            post_preorder_hold(order, actor=self.parent)
+
+        api = APIClient()
+        admin = User.objects.create_user(username='replacement-scan-admin', password='test', role='admin', school=self.student.school)
+        api.force_authenticate(admin)
+        replaced = api.post('/resources/replace-card', {
+            'old_card_id': str(self.card.id), 'new_card_number': 'PREORDER-SCAN-NEW',
+            'reason': 'lost', 'carry_balance': True,
+        })
+        self.assertEqual(replaced.status_code, 200, replaced.data)
+        new_card = RFIDCard.objects.get(card_number='PREORDER-SCAN-NEW')
+
+        api.force_authenticate(self.operator)
+        session = ScanSession.objects.create(operator=self.operator, type='lunch')
+        scanned = api.post('/api/v1/sessions/scan-card', {
+            'session_id': str(session.id), 'card_number': new_card.card_number,
+            'item_id': str(self.item.id),
+        }, format='json')
+
+        self.assertEqual(scanned.status_code, 201, scanned.data)
+        self.assertTrue(scanned.data['preorder_fulfilled'])
+        transaction_row = Transaction.objects.get(preorder_item__preorder=order)
+        self.assertEqual(transaction_row.rfid_card_id, new_card.id)
+        new_card.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(new_card.held_balance, Decimal('0.00'))
+        self.assertEqual(new_card.balance, Decimal('800.00'))
+        self.assertEqual(order.status, 'fulfilled')
+
     def test_scan_fulfils_matching_order_and_reversal_refunds_wallet(self):
         with transaction.atomic():
             post_opening(self.card)
