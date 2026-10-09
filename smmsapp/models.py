@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q, CheckConstraint
 from django.db.models.signals import pre_save
@@ -43,10 +44,21 @@ class School(models.Model):
 def set_number(sender, instance, **kwargs):
     if instance.number is None:
         last_instance = sender.objects.order_by('-number').first()
-        if last_instance and last_instance.number < 99:
+        if last_instance is None or last_instance.number is None:
+            instance.number = 10
+        elif last_instance.number < 99:
             instance.number = last_instance.number + 1
         else:
-            instance.number = 10 
+            raise ValidationError('School number capacity (10–99) is exhausted; do not reuse a school number.')
+
+
+class ControlNumberCounter(models.Model):
+    school = models.ForeignKey(School, on_delete=models.PROTECT, related_name='control_number_counters')
+    yymm = models.CharField(max_length=4)
+    last_value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['school', 'yymm'], name='uniq_control_counter_school_month')]
     
 
 # -------- USER TABLE ----------

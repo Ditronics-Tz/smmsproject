@@ -16,7 +16,6 @@ Design:
 
 import csv
 import io
-import random
 from datetime import datetime
 
 from ..models import (
@@ -40,24 +39,6 @@ VALID_GENDERS = {'M', 'F'}
 
 class ImportError(Exception):
     """Raised for structural file errors (missing headers, empty file, etc.)."""
-
-
-def _generate_control_number(school_number):
-    """Recreate the control number used by CreateRFIDCardSerializer."""
-    year = datetime.now().year % 100
-    month = f"{datetime.now().month:02d}"
-    random4 = random.randint(1000, 9999)
-    return f"{school_number}{year}{month}{random4}"
-
-
-def _unique_control_number(school_number):
-    """Return a control number that is not already in use."""
-    for _ in range(20):
-        candidate = _generate_control_number(school_number)
-        if not RFIDCard.objects.filter(control_number=candidate).exists():
-            return candidate
-    # Fallback: include a larger random to avoid a collision.
-    return f"{school_number}{datetime.now().year % 100}{datetime.now().month:02d}{random.randint(100000, 999999)}"
 
 
 class StudentImporter:
@@ -250,9 +231,10 @@ class StudentImporter:
 
             card = None
             if card_number:
-                card = RFIDCard.objects.create(
+                from .cards import create_card_with_control_number
+                card = create_card_with_control_number(
+                    school=self.school,
                     card_number=card_number,
-                    control_number=_unique_control_number(self.school.number),
                     student_or_staff=student,
                     balance=0.0,
                     is_active=False,  # new cards inactive until activated

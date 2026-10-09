@@ -58,8 +58,6 @@ class ChangePasswordRequestSerializer(serializers.Serializer):
     new_password = serializers.CharField(required=False, allow_blank=True)
 from ..models import *
 from django.db.models import Q
-from datetime import datetime
-import random
 
 # ---- SCHOOL INFO ----
 class SchoolSerializer(serializers.ModelSerializer):
@@ -276,15 +274,6 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         fields = ['id', 'balance', 'student_or_staff', 'is_active', 'control_number', 'card_number', 'card_uid', 'issued_date']
         read_only_fields = ['control_number']  # Ensure control_number isn't required in requests
 
-    # Generate control number automatically
-    def generate_control_number(self, school_number):
-        # Generate control number in the format STU{year}{month}{random6digit}
-        year = datetime.now().year % 100 # get a last two digits
-        month = f"{datetime.now().month:02d}"  # Ensure month is always two digits (e.g., 01, 02)
-        date = f"{datetime.now().day:02d}"
-        random4digit = random.randint(1000, 9999)
-        return f"{school_number}{year}{month}{random4digit}"
-
     # Ensure a card can never be created with a balance below the enforced floor.
     def validate_balance(self, value):
         if value is not None and value < RFID_BALANCE_FLOOR:
@@ -295,7 +284,7 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
 
     # Create a new RFID card
     def create(self, validated_data):
-        from ..services.cards import normalize_uid
+        from ..services.cards import create_card_with_control_number, generate_control_number, normalize_uid
         raw_uid = validated_data.pop('card_uid', None)
         if raw_uid:
             try:
@@ -310,16 +299,14 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         student_or_staff = validated_data.get('student_or_staff')
 
         # Ensure the student_or_staff has a school assigned
-        if student_or_staff and student_or_staff.school:
-            school_number = student_or_staff.school.number  # Get the school number
-        else:
+        if not student_or_staff or not student_or_staff.school:
             raise serializers.ValidationError({"school_number": "Student or staff must belong to a school."})
 
         # The legacy card-number path remains unchanged. UID-only cards get a
         # generated human/USB identifier from the existing number generator.
         if not validated_data.get('card_number'):
-            for _ in range(20):
-                candidate = f"CARD-{self.generate_control_number(school_number)}"
+            for _ in range(5):
+                candidate = f"CARD-{generate_control_number(student_or_staff.school)}"
                 if not RFIDCard.objects.filter(card_number=candidate).exists() and not RFIDCard.objects.filter(uid_hex=candidate).exists():
                     validated_data['card_number'] = candidate
                     break
@@ -328,14 +315,17 @@ class CreateRFIDCardSerializer(serializers.ModelSerializer):
         if RFIDCard.objects.filter(uid_hex=validated_data.get('card_number').strip().upper()).exists():
             raise serializers.ValidationError({'card_number': 'CARD_UID_CONFLICT'})
 
-        # school_number = validated_data.pop('school_number')
-        control_number = self.generate_control_number(school_number)
-        validated_data['control_number'] = control_number
         # A newly issued card is always inactive until the student activates it.
         # Assign via the dict (not a duplicate kwarg) so `is_active` supplied in
         # the request cannot collide with the enforced default.
         validated_data['is_active'] = False
-        rfid = RFIDCard.objects.create(**validated_data)
+        try:
+            rfid = create_card_with_control_number(school=student_or_staff.school, **validated_data)
+        except Exception as exc:
+            from ..services.cards import ControlNumberError
+            if isinstance(exc, ControlNumberError):
+                raise serializers.ValidationError({'control_number': str(exc)}) from exc
+            raise
 
         if rfid.student_or_staff.role == 'student':
             # Notify parent

@@ -16,6 +16,7 @@ from ..serializers.system import CodeMessageSerializer
 from ..models import *
 from ..permissions.roles import IsAdminOrParent, IsAdminOnly
 from ..permissions.features import FeatureEnabled
+from ..services.cards import create_card_with_control_number, generate_control_number
 
 # ----- API FOR GET SCHOOL -----
 @extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=SchoolSerializer(many=True))
@@ -776,8 +777,6 @@ class ReplaceCardView(APIView):
 
                 student_or_staff = old_card.student_or_staff
 
-                # Generate a fresh control number from the owner's school.
-                ctrl_generator = CreateRFIDCardSerializer()
                 school = student_or_staff.school
                 if school is None:
                     return Response(
@@ -785,21 +784,19 @@ class ReplaceCardView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 if not new_card_number:
-                    for _ in range(20):
-                        candidate = f"CARD-{ctrl_generator.generate_control_number(school.number)}"
+                    for _ in range(5):
+                        candidate = f"CARD-{generate_control_number(school)}"
                         if not RFIDCard.objects.filter(card_number=candidate).exists() and not RFIDCard.objects.filter(uid_hex=candidate).exists():
                             new_card_number = candidate
                             break
                     if not new_card_number:
                         return Response({"code": 500, "message": "Could not allocate a unique card number."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                control_number = ctrl_generator.generate_control_number(school.number)
-
                 # Create the new active card with the carried-over balance.
                 carried_balance = old_card.balance if carry_balance else Decimal('0.00')
-                new_card = RFIDCard.objects.create(
+                new_card = create_card_with_control_number(
+                    school=school,
                     card_number=new_card_number,
                     uid_hex=uid_hex,
-                    control_number=control_number,
                     student_or_staff=student_or_staff,
                     balance=old_card.balance if carry_balance else 0.0,
                     held_balance=old_card.held_balance,
