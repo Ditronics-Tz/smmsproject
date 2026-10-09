@@ -416,7 +416,7 @@ def _create_invite(user):
         user=user,
         token_hash=hashlib.sha256(raw_token.encode('utf-8')).hexdigest(),
         purpose='invite',
-        expires_at=timezone.now() + timedelta(minutes=30),
+        expires_at=timezone.now() + timedelta(hours=settings.INVITE_TOKEN_TTL_HOURS),
     )
     return f"{settings.API_BASE_URL.rstrip('/')}/auth/accept-invite#token={raw_token}"
 
