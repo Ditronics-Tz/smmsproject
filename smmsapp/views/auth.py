@@ -317,6 +317,7 @@ class ForgetPasswordView(APIView):
 class ConfirmPasswordResetView(APIView):
     """Validate a single-use, expiring reset token and set a new password."""
     permission_classes = [AllowAny]
+    throttle_scope = 'reset_password'
     serializer_class = PasswordResetConfirmSerializer
     RESET_LINK_TTL = timedelta(minutes=30)
 

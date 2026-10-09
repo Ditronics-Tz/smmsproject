@@ -296,6 +296,7 @@ REST_FRAMEWORK = {
         'anon': '60/min',             # global anonymous ceiling
         'login': '5/min',             # brute-force / credential-enumeration guard
         'forget_password': '3/min',   # account-enumeration guard
+        'reset_password': '5/min',   # token-guessing / reset abuse guard
         'resend_invite': '5/min',    # per-admin invitation resend limit
     },
 }
