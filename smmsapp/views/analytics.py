@@ -63,6 +63,16 @@ def _cached(request, name, filters, builder):
     return response
 
 
+def _with_payment_revenue(queryset):
+    from smmsapp.services.transaction_metrics import with_payment_revenue
+    return with_payment_revenue(queryset)
+
+
+def _penalty_amount():
+    from smmsapp.services.transaction_metrics import penalty_charge_expression
+    return penalty_charge_expression()
+
+
 def _transactions(start, end, request, *, meal_type=None):
     qs = Transaction.objects.filter(
         transaction_date__date__gte=start,
@@ -70,7 +80,7 @@ def _transactions(start, end, request, *, meal_type=None):
         transaction_status__in=['successful', 'penalty'],
         is_voided=False,
     ).select_related('student_or_staff', 'item', 'session')
-    qs = _scope(request, qs)
+    qs = _with_payment_revenue(_scope(request, qs))
     if meal_type:
         qs = qs.filter(session__type=meal_type)
     return qs
@@ -105,15 +115,15 @@ class SalesAnalyticsView(APIView):
         def build():
             qs = _transactions(start, end, request, meal_type=meal_type)
             totals = qs.aggregate(
-                revenue=Sum('charged_amount', filter=Q(transaction_status='successful')),
-                penalty_amount=Sum('charged_amount', filter=Q(transaction_status='penalty')),
+                revenue=Sum('payment_revenue', filter=Q(transaction_status='successful')),
+                penalty_amount=Sum(_penalty_amount(), filter=Q(transaction_status='penalty')),
                 count=Count('id'),
             )
             if group_by == 'day':
                 live = {
                     row['day'].isoformat(): row for row in qs.annotate(day=TruncDate('transaction_date')).values('day').annotate(
-                        revenue=Sum('charged_amount', filter=Q(transaction_status='successful')),
-                        penalty_amount=Sum('charged_amount', filter=Q(transaction_status='penalty')),
+                        revenue=Sum('payment_revenue', filter=Q(transaction_status='successful')),
+                        penalty_amount=Sum(_penalty_amount(), filter=Q(transaction_status='penalty')),
                         count=Count('id'),
                     )
                 }
@@ -145,15 +155,15 @@ class SalesAnalyticsView(APIView):
                     day += timedelta(days=1)
             elif group_by == 'item':
                 rows = qs.values('item__name').annotate(
-                    revenue=Sum('charged_amount', filter=Q(transaction_status='successful')),
-                    penalty_amount=Sum('charged_amount', filter=Q(transaction_status='penalty')),
+                    revenue=Sum('payment_revenue', filter=Q(transaction_status='successful')),
+                    penalty_amount=Sum(_penalty_amount(), filter=Q(transaction_status='penalty')),
                     count=Count('id'),
                 ).order_by('item__name')
                 series = [{'label': r['item__name'], 'revenue': _money(r['revenue']), 'penalty_amount': _money(r['penalty_amount']), 'count': r['count']} for r in rows]
             else:
                 rows = qs.annotate(hour=TruncHour('transaction_date', tzinfo=timezone.get_current_timezone())).values('hour').annotate(
-                    revenue=Sum('charged_amount', filter=Q(transaction_status='successful')),
-                    penalty_amount=Sum('charged_amount', filter=Q(transaction_status='penalty')),
+                    revenue=Sum('payment_revenue', filter=Q(transaction_status='successful')),
+                    penalty_amount=Sum(_penalty_amount(), filter=Q(transaction_status='penalty')),
                     count=Count('id'),
                 ).order_by('hour')
                 series = [{'label': r['hour'].isoformat(), 'revenue': _money(r['revenue']), 'penalty_amount': _money(r['penalty_amount']), 'count': r['count']} for r in rows]
@@ -192,7 +202,8 @@ class WalletHealthView(APIView):
                 transaction_status__in=['successful', 'penalty'], is_voided=False,
             )
             spend_qs = _scope(request, spend_qs)
-            spend_rows = {r['day'].isoformat(): r['total'] for r in spend_qs.annotate(day=TruncDate('transaction_date')).values('day').annotate(total=Sum('charged_amount'))}
+            spend_qs = _with_payment_revenue(spend_qs)
+            spend_rows = {r['day'].isoformat(): r['total'] for r in spend_qs.annotate(day=TruncDate('transaction_date')).values('day').annotate(total=Sum('payment_revenue'))}
             series = []
             day = first
             while day <= today:
@@ -233,7 +244,7 @@ class OperatorsAnalyticsView(APIView):
                     session_id__in=session_ids, transaction_date__date__gte=start, transaction_date__date__lte=end,
                     transaction_status='successful', is_voided=False,
                 )
-                totals = txns.aggregate(revenue=Sum('charged_amount'))
+                totals = _with_payment_revenue(txns).aggregate(revenue=Sum('payment_revenue'))
                 variance = Reconciliation.objects.filter(session_id__in=session_ids).aggregate(total=Sum('variance'))['total']
                 reversals = Reversal.objects.filter(
                     transaction__session__operator=operator, reversed_at__date__gte=start, reversed_at__date__lte=end,
@@ -266,8 +277,8 @@ class ClassesAnalyticsView(APIView):
 
         def build():
             rows = _transactions(start, end, request).values('student_or_staff__class_room').annotate(
-                meals=Count('id'), spend=Sum('charged_amount'),
-                penalties=Sum('charged_amount', filter=Q(transaction_status='penalty')),
+                meals=Count('id'), spend=Sum('payment_revenue'),
+                penalties=Sum(_penalty_amount(), filter=Q(transaction_status='penalty')),
             ).order_by('student_or_staff__class_room')
             return [{'class_room': r['student_or_staff__class_room'] or '', 'meals': r['meals'], 'spend': _money(r['spend']), 'penalties': _money(r['penalties'])} for r in rows]
         return _cached(request, 'classes', filters, build)
@@ -282,7 +293,8 @@ class PenaltiesAnalyticsView(APIView):
         if error:
             return error
         qs = _transactions(start, end, request).filter(transaction_status='penalty')
-        totals = qs.aggregate(count=Count('id'), amount=Sum('charged_amount'))
+        from smmsapp.services.transaction_metrics import penalty_charge_expression
+        totals = _with_payment_revenue(qs).aggregate(count=Count('id'), amount=Sum(penalty_charge_expression()))
         near = RFIDCard.objects.filter(
             is_active=True, insufficient_meal_count__gte=settings.STRIKE_LIMIT - 2,
         ).select_related('student_or_staff')

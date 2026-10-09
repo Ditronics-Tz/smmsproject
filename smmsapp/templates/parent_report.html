@@ -18,6 +18,7 @@
         <p><strong>Date:</strong> {{ today }}</p>
         <p><strong>Total Start Balance:</strong> {{ total_start_balance|floatformat:2 }}</p>
         <p><strong>Total Expenditure:</strong> {{ total_expenditure|floatformat:2 }}</p>
+        <p><strong>Sponsor Paid:</strong> {{ sponsor_paid|floatformat:2 }}</p>
         <p><strong>Total Debt (Penalties):</strong> {{ total_debt|floatformat:2 }}</p>
         <p><strong>Total Remaining Balance:</strong> {{ total_remaining_balance|floatformat:2 }}</p>
 
@@ -47,15 +48,19 @@
                 <th>Item</th>
                 <th>Time</th>
                 <th>Amount</th>
+                <th>Wallet Paid</th>
+                <th>Sponsor Paid</th>
                 <th>Status</th>
             </tr>
             {% for transaction in transactions %}
             <tr>
                 <td>{{ forloop.counter }}</td>
-                <td>{{ transaction.student.first_name }} {{ transaction.student.last_name }}</td>
+                <td>{{ transaction.student_or_staff.first_name }} {{ transaction.student_or_staff.last_name }}</td>
                 <td>{{ transaction.item.name }}</td>
                 <td>{{ transaction.transaction_date|date:"H:i:s" }}</td>
                 <td>{{ transaction.amount|floatformat:2 }}</td>
+                <td>{{ transaction.wallet_paid|floatformat:2 }}</td>
+                <td>{{ transaction.sponsor_paid|floatformat:2 }}</td>
                 <td>{{ transaction.transaction_status }}</td>
             </tr>
             {% endfor %}

@@ -39,18 +39,26 @@ def generate_end_of_day_report(school=None):
         tx_filter &= Q(student_or_staff__school=school)
         card_filter &= Q(student_or_staff__school=school)
 
-    transactions = Transaction.objects.filter(tx_filter)
-
-    total_sales = transactions.aggregate(Sum('charged_amount'))['charged_amount__sum'] or 0
+    from .services.transaction_metrics import with_payment_revenue
+    transactions = list(with_payment_revenue(Transaction.objects.filter(
+        tx_filter, is_voided=False, transaction_status__in=['successful', 'penalty'],
+    ).select_related('item').prefetch_related('payment_parts')))
+    for txn in transactions:
+        txn.sponsor_paid = sum((part.amount for part in txn.payment_parts.all() if part.source == 'fund'), 0)
+        txn.wallet_paid = txn.charged_amount
+    total_sales = sum((txn.payment_revenue for txn in transactions), 0)
+    sponsor_paid = sum((txn.sponsor_paid for txn in transactions), 0)
+    wallet_sales = sum((txn.wallet_paid for txn in transactions), 0)
 
     available_balance = RFIDCard.objects.filter(card_filter).aggregate(Sum('balance'))['balance__sum'] or 0
-    start_balance = available_balance + total_sales
+    start_balance = available_balance + wallet_sales
     remaining_balance = available_balance
 
     html_string = render_to_string("admin_report.html", {
         "today": today,
         "total_start_balance": start_balance,
         "total_expenditure": total_sales,
+        "sponsor_paid": sponsor_paid,
         "total_remaining_balance": remaining_balance,
         "transactions": transactions,
     })
@@ -64,6 +72,7 @@ def generate_end_of_day_report(school=None):
 def generate_parent_end_of_day_report(request):
     buffer = BytesIO()
     today = now().date()
+    from .services.transaction_metrics import with_payment_revenue
 
     students = ParentStudent.objects.filter(parent=request.user)
 
@@ -74,8 +83,18 @@ def generate_parent_end_of_day_report(request):
 
     for student in students:
         available_balance = RFIDCard.objects.filter(student_or_staff=student.student).aggregate(Sum('balance'))['balance__sum'] or 0
-        expenditure = Transaction.objects.filter(transaction_date__date=today, student_or_staff=student.student).aggregate(Sum('charged_amount'))['charged_amount__sum'] or 0
-        start_balance = available_balance + expenditure
+        student_txns = Transaction.objects.filter(
+            transaction_date__date=today, student_or_staff=student.student,
+            is_voided=False, transaction_status__in=['successful', 'penalty'],
+        )
+        student_txns = with_payment_revenue(student_txns)
+        student_txns = list(student_txns.prefetch_related('payment_parts'))
+        for txn in student_txns:
+            txn.sponsor_paid = sum((part.amount for part in txn.payment_parts.all() if part.source == 'fund'), 0)
+            txn.wallet_paid = txn.charged_amount
+        expenditure = sum((txn.payment_revenue for txn in student_txns), 0)
+        wallet_expenditure = sum((txn.wallet_paid for txn in student_txns), 0)
+        start_balance = available_balance + wallet_expenditure
         remaining_balance = available_balance
 
         student_data.append({
@@ -90,8 +109,17 @@ def generate_parent_end_of_day_report(request):
         total_remaining_balance += remaining_balance
 
     # Get all transactions for today for all children
-    transactions = Transaction.objects.filter(transaction_date__date=today, student_or_staff__in=[s.student for s in students])
-    total_debt = transactions.filter(transaction_status="penalty").aggregate(Sum('charged_amount'))['charged_amount__sum'] or 0
+    transactions = list(Transaction.objects.filter(
+        transaction_date__date=today, student_or_staff__in=[s.student for s in students],
+        is_voided=False, transaction_status__in=['successful', 'penalty'],
+    ).prefetch_related('payment_parts'))
+    for txn in transactions:
+        txn.sponsor_paid = sum((part.amount for part in txn.payment_parts.all() if part.source == 'fund'), 0)
+        txn.wallet_paid = txn.charged_amount
+    total_debt = sum((
+        (txn.amount - txn.item.price) if txn.payment_parts.all() else txn.charged_amount
+        for txn in transactions if txn.transaction_status == 'penalty'
+    ), 0)
 
     # Render the HTML template
     html_string = render_to_string("parent_report.html", {
@@ -101,6 +129,7 @@ def generate_parent_end_of_day_report(request):
         "total_expenditure": total_expenditure,
         "total_remaining_balance": total_remaining_balance,
         "total_debt": total_debt,
+        "sponsor_paid": sum((txn.sponsor_paid for txn in transactions), 0),
         "transactions": transactions,
     })
 

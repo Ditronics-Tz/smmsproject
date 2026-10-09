@@ -23,7 +23,7 @@ EXPORT_SYNC_MAX_ROWS = getattr(settings, 'EXPORT_SYNC_MAX_ROWS', 2000)
 # ---------------------------------------------------------------------------
 
 def transaction_queryset(user, filters):
-    qs = Transaction.objects.all().order_by('-transaction_date')
+    qs = Transaction.objects.prefetch_related('payment_parts__fund').all().order_by('-transaction_date')
 
     school = get_admin_scope(user)
     if user.role == 'admin':
@@ -128,6 +128,9 @@ def deposit_queryset(user, filters):
 def _transaction_rows(qs):
     rows = []
     for t in qs.select_related('student_or_staff', 'item'):
+        parts = list(t.payment_parts.all())
+        gross = sum((part.amount for part in parts), Decimal('0.00')) if parts else t.charged_amount
+        fund_paid = sum((part.amount for part in parts if part.source == 'fund'), Decimal('0.00'))
         rows.append([
             t.id,
             t.student_or_staff.username,
@@ -135,6 +138,8 @@ def _transaction_rows(qs):
             t.rfid_card.card_number,
             t.item.name if t.item else '',
             t.charged_amount,
+            gross,
+            fund_paid,
             t.transaction_status,
             t.transaction_date.isoformat() if t.transaction_date else '',
             'Voided' if t.is_voided else '',
@@ -193,13 +198,15 @@ def _analytics_txns(user, filters):
     school = get_admin_scope(user)
     if school is not None:
         qs = qs.filter(student_or_staff__school=school)
-    return qs
+    from .transaction_metrics import with_payment_revenue
+    return with_payment_revenue(qs)
 
 
 def analytics_sales_queryset(user, filters):
+    from .transaction_metrics import penalty_charge_expression
     return list(_analytics_txns(user, filters).annotate(day=TruncDate('transaction_date')).values('day').annotate(
-        revenue=Sum('charged_amount', filter=Q(transaction_status='successful')),
-        penalty=Sum('charged_amount', filter=Q(transaction_status='penalty')),
+        revenue=Sum('payment_revenue', filter=Q(transaction_status='successful')),
+        penalty=Sum(penalty_charge_expression(), filter=Q(transaction_status='penalty')),
         meals=Count('id'),
     ).order_by('day'))
 
@@ -231,7 +238,7 @@ def analytics_wallet_health_queryset(user, filters):
     if school is not None:
         deposits = deposits.filter(control_number__student_or_staff__school=school)
     deposits_by_day = {r['day']: r['total'] for r in deposits.annotate(day=TruncDate('processed_at')).values('day').annotate(total=Sum('amount'))}
-    spends_by_day = {r['day']: r['total'] for r in spends.annotate(day=TruncDate('transaction_date')).values('day').annotate(total=Sum('charged_amount'))}
+    spends_by_day = {r['day']: r['total'] for r in spends.annotate(day=TruncDate('transaction_date')).values('day').annotate(total=Sum('payment_revenue'))}
     daily_rows = []
     current = start
     while current <= end:
@@ -266,7 +273,7 @@ def analytics_operators_queryset(user, filters):
         totals = Transaction.objects.filter(
             session_id__in=session_ids, transaction_date__date__gte=start, transaction_date__date__lte=end,
             transaction_status='successful', is_voided=False,
-        ).aggregate(revenue=Sum('charged_amount'))
+        ).aggregate(revenue=Sum('payment_revenue'))
         variance = Reconciliation.objects.filter(session_id__in=session_ids).aggregate(total=Sum('variance'))['total']
         reversal_count = Reversal.objects.filter(transaction__session__operator=operator, reversed_at__date__gte=start, reversed_at__date__lte=end).count()
         rows.append({
@@ -277,12 +284,42 @@ def analytics_operators_queryset(user, filters):
     return rows
 
 
+def sponsorship_report_queryset(user, filters):
+    from ..models import TransactionPayment
+    qs = TransactionPayment.objects.filter(
+        fund_id=filters.get('fund_id'), transaction__transaction_status__in=['successful', 'penalty'],
+        transaction__is_voided=False,
+    ).select_related('transaction__student_or_staff', 'transaction__session').order_by('transaction__transaction_date')
+    start, end = _analytics_dates(filters)
+    qs = qs.filter(transaction__transaction_date__date__gte=start, transaction__transaction_date__date__lte=end)
+    school = get_admin_scope(user)
+    if school is not None:
+        qs = qs.filter(transaction__student_or_staff__school=school)
+    return qs
+
+
+def _sponsorship_report_rows(qs, filters):
+    grouped = {}
+    hide_names = filters.get('hide_names', True)
+    for part in qs:
+        student = part.transaction.student_or_staff
+        student_code = f'S-{int(str(student.pk).replace("-", ""), 16) % 10000000:07d}'
+        row = grouped.setdefault(str(student.pk), {
+            'student': student_code if hide_names else f'{student.first_name} {student.last_name}'.strip(),
+            'class_room': student.class_room or '', 'meals': set(), 'amount': Decimal('0.00'),
+        })
+        row['meals'].add(part.transaction_id)
+        row['amount'] += part.amount
+    return [[row['student'], row['class_room'], len(row['meals']), row['amount']]
+            for _, row in sorted(grouped.items())]
+
+
 def _analytics_operator_rows(rows):
     return [[r['operator'], r['sessions'], r['revenue'], r['variance'], r['reversals']] for r in rows]
 
 
 TRANSACTION_HEADERS = [
-    'Transaction ID', 'Username', 'Name', 'Card Number', 'Item', 'Charged Amount',
+    'Transaction ID', 'Username', 'Name', 'Card Number', 'Item', 'Wallet Charged', 'Meal Revenue', 'Sponsor Paid',
     'Status', 'Transaction Date', 'Voided',
 ]
 STUDENT_HEADERS = [
@@ -300,6 +337,7 @@ ENTITY_BUILDERS = {
     'analytics_sales': (analytics_sales_queryset, _analytics_sales_rows, ['Date', 'Revenue', 'Meals', 'Penalty Amount']),
     'analytics_wallet_health': (analytics_wallet_health_queryset, _analytics_wallet_rows, ['Record Type', 'Date', 'Metric', 'Deposits or Value', 'Spend or Count']),
     'analytics_operators': (analytics_operators_queryset, _analytics_operator_rows, ['Operator', 'Sessions', 'Revenue', 'Variance', 'Reversals']),
+    'sponsorship_fund_report': (sponsorship_report_queryset, _sponsorship_report_rows, ['Student', 'Class', 'Meals', 'Sponsored Amount']),
 }
 
 

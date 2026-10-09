@@ -362,10 +362,11 @@ class ReverseTransactionView(APIView):
                 preorder.cancelled_at = timezone.now()
                 preorder.note = 'Cancelled after reversal of a fulfilled pre-order transaction.'
                 preorder.save(update_fields=['status', 'cancelled_at', 'note'])
-            original_journal = txn.journal_entries.first()
-            if original_journal:
+            original_journals = txn.journal_entries.all()
+            if original_journals.exists():
                 from ..services.ledger import post_reversal
-                post_reversal(original_journal, reversal, actor=request.user)
+                for original_journal in original_journals.order_by('created_at', 'id'):
+                    post_reversal(original_journal, reversal, actor=request.user)
             elif restore_amount > 0:
                 # Transactions created before double-entry journal rollout do
                 # not have a source entry to mirror; preserve balanced accounts

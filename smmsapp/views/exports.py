@@ -57,7 +57,7 @@ def _read_token(token):
 def _write_export(entity, filename, user, filters):
     queryset_fn, rows_fn, headers = ENTITY_BUILDERS[entity]
     qs = queryset_fn(user, filters)
-    rows = rows_fn(qs)
+    rows = rows_fn(qs, filters) if entity == 'sponsorship_fund_report' else rows_fn(qs)
     if filename.endswith('.xlsx'):
         content = export_to_xlsx(rows, headers)
     else:

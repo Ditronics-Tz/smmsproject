@@ -17,7 +17,6 @@ from drf_spectacular.utils import extend_schema
 from ..serializers.system import CodeMessageSerializer
 from django.utils import timezone
 from ..permissions.roles import IsAdminOrOperator, IsOperator, IsAdminOrParent, IsAdminOnly
-from ..permissions.features import FeatureEnabled
 from ..services.audit import log_action, snapshot
 from ..utils import get_admin_scope
 from ..services.cards import normalize_uid
@@ -29,7 +28,7 @@ from django.conf import settings
 @extend_schema(tags=['sessions'], request=ScanRFIDRequestSerializer,
     responses={201: ScannedDataSerializer, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer})
 class ScanRFIDCardView(APIView):
-    permission_classes = [IsAuthenticated, FeatureEnabled('NFC_SCAN')]
+    permission_classes = [IsAuthenticated]
     throttle_classes = [OperatorScanThrottle]
 
     def post(self, request):
@@ -49,6 +48,9 @@ class ScanRFIDCardView(APIView):
             return Response({'code': 'CARD_IDENTIFIER_REQUIRED', 'message': 'Provide exactly one of card_number or card_uid.'}, status=status.HTTP_400_BAD_REQUEST)
         is_uid = has_card_uid
         if is_uid:
+            from ..services.features import is_enabled
+            if not is_enabled('NFC_SCAN'):
+                return Response({'code': 'FEATURE_DISABLED', 'feature': 'NFC_SCAN'}, status=status.HTTP_403_FORBIDDEN)
             try:
                 card_uid = normalize_uid(request.data.get('card_uid'))
             except ValueError as exc:
@@ -146,6 +148,16 @@ class ScanRFIDCardView(APIView):
                             transaction_status='successful', session=session, scan_source=scan_source,
                             preorder_item=fulfilled,
                         )
+                        from ..models import TransactionPayment
+                        from ..models import JournalEntry
+                        preorder_entry = JournalEntry.objects.filter(
+                            idempotency_key=f'preorder-fulfil:{preorder.id}:{fulfilled.item_id}',
+                        ).first()
+                        if preorder_entry:
+                            TransactionPayment.objects.create(
+                                transaction=transaction_record, source='preorder',
+                                amount=fulfilled.unit_price, journal_entry=preorder_entry,
+                            )
                         if stock_movement:
                             stock_movement.source_transaction = transaction_record
                             stock_movement.save(update_fields=['source_transaction'])
@@ -198,10 +210,30 @@ class ScanRFIDCardView(APIView):
                 if isinstance(consumed, StockMovement):
                     stock_movement = consumed
 
-            # Deduct balance if sufficient funds
+            # Waterfall: pre-order (handled above), sponsor allocations, then wallet.
+            sponsor_shares = []
+            has_sponsor_allocation = False
+            from ..services.features import is_enabled
+            if is_enabled('SPONSORSHIP'):
+                from ..services.sponsorship import allocate_sponsor_shares, has_eligible_allocation
+                has_sponsor_allocation = has_eligible_allocation(student_or_staff, session.type, timezone.localdate())
+                sponsor_shares = allocate_sponsor_shares(
+                    student_or_staff, session.type, timezone.localdate(), item_price,
+                )
+            sponsor_total = sum((share for _, share in sponsor_shares), Decimal('0.00'))
+            wallet_meal_amount = max(Decimal('0.00'), item_price - sponsor_total)
+            if has_sponsor_allocation and wallet_meal_amount > 0 and not getattr(settings, 'SPONSOR_FALLBACK_TO_WALLET', True):
+                transaction.set_rollback(True)
+                return Response(
+                    {'code': 'SPONSOR_FUNDS_EXHAUSTED', 'detail': 'Available sponsor funds cannot cover this meal.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            # Deduct only the remaining wallet portion; penalty applies only to it.
             old_balance = rfid_card.balance  # capture before change
-            if rfid_card.balance >= item_price:
-                rfid_card.balance -= item_price
+            penalty_amount = Decimal('0.00')
+            if wallet_meal_amount == 0 or rfid_card.balance >= wallet_meal_amount:
+                rfid_card.balance -= wallet_meal_amount
                 amount = item_price
                 trans_status = 'successful'
                 title = f"Transaction Report"
@@ -213,12 +245,13 @@ class ScanRFIDCardView(APIView):
                 # Allow the meal but apply penalty (-500). Clamp to the balance
                 # floor (-500.00) so the invariant enforced by the model remains
                 # satisfied even when the balance was already negative.
+                penalty_amount = Decimal(str(settings.PENALTY_FEE))
                 rfid_card.balance = max(
-                    rfid_card.balance - (item_price + settings.PENALTY_FEE),
+                    rfid_card.balance - (wallet_meal_amount + penalty_amount),
                     Decimal(str(settings.RFID_BALANCE_FLOOR)),
                 )
                 rfid_card.insufficient_meal_count += 1
-                amount = item_price + settings.PENALTY_FEE
+                amount = item_price + penalty_amount
                 trans_status = 'penalty'
                 title = f"WARNING: Transaction Penalty"
                 if student_or_staff.role == 'student':
@@ -266,11 +299,22 @@ class ScanRFIDCardView(APIView):
                     ref_transaction=transaction_record,
                 )
 
-            from ..services.ledger import post_penalty, post_purchase
-            if trans_status == 'successful':
-                post_purchase(transaction_record, actor=user)
-            else:
-                post_penalty(transaction_record, actor=user)
+            from ..services.ledger import post_fund_spend, post_wallet_meal
+            from ..models import TransactionPayment
+            for fund, share in sponsor_shares:
+                fund_entry = post_fund_spend(transaction_record, fund, share, actor=user)
+                TransactionPayment.objects.create(
+                    transaction=transaction_record, source='fund', fund=fund,
+                    amount=share, journal_entry=fund_entry,
+                )
+            wallet_entry = post_wallet_meal(
+                transaction_record, wallet_meal_amount, penalty_amount, actor=user,
+            )
+            if wallet_meal_amount > 0 and wallet_entry:
+                TransactionPayment.objects.create(
+                    transaction=transaction_record, source='wallet',
+                    amount=wallet_meal_amount, journal_entry=wallet_entry,
+                )
 
             try:
                 log_action('create', obj=transaction_record, after=snapshot(transaction_record))
@@ -311,7 +355,15 @@ class ScanRFIDCardView(APIView):
 
             # Return response
             serializer = ScannedDataSerializer(scanned_data)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            serializer_data = dict(serializer.data)
+            serializer_data['payment_breakdown'] = [
+                {'source': 'fund', 'fund_id': fund.pk, 'fund_name': fund.name, 'amount': str(share)}
+                for fund, share in sponsor_shares
+            ]
+            if wallet_meal_amount > 0:
+                serializer_data['payment_breakdown'].append({'source': 'wallet', 'amount': str(wallet_meal_amount)})
+            serializer_data['preorder_fulfilled'] = False
+            return Response(serializer_data, status=status.HTTP_201_CREATED)
 
 
 # --- API FOR GET ACTIVE SESSION -----
@@ -500,7 +552,7 @@ class TransactionListView(APIView, PageNumberPagination):
 
         # Admins can see all transactions (school-scoped when school-admin)
         if user.role == 'admin':
-            transactions = Transaction.objects.all().order_by('-transaction_date')
+            transactions = Transaction.objects.prefetch_related('payment_parts__fund').all().order_by('-transaction_date')
             school = get_admin_scope(user)
             if school is not None:
                 transactions = transactions.filter(student_or_staff__school=school)
@@ -511,10 +563,10 @@ class TransactionListView(APIView, PageNumberPagination):
             # Extract the student users from the ParentStudent relationships
             children = [parent_student.student for parent_student in parent_students]
             # Filter transactions for those students
-            transactions = Transaction.objects.filter(student_or_staff__in=children).order_by('-transaction_date')
+            transactions = Transaction.objects.filter(student_or_staff__in=children).prefetch_related('payment_parts__fund').order_by('-transaction_date')
         # Parents can only see transactions for their children
         elif user.role == 'staff':
-            transactions = Transaction.objects.filter(student_or_staff=user).order_by('-transaction_date')
+            transactions = Transaction.objects.filter(student_or_staff=user).prefetch_related('payment_parts__fund').order_by('-transaction_date')
         else:
             return Response({'code': 403, 'message': 'Unauthorized access'}, status=status.HTTP_403_FORBIDDEN)
         

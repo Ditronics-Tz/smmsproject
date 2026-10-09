@@ -1,4 +1,4 @@
-from django.db.models import Sum, Count, Q, F
+from django.db.models import Sum, Count, Q
 from django.http import FileResponse
 from django.utils.timezone import now, timedelta
 from rest_framework.response import Response
@@ -105,10 +105,12 @@ class SalesSummaryView(APIView):
 
         total_success = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter).count()
         total_penalts = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').filter(txn_filter).count()
-        total_success_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter) \
-                                         .aggregate(total_amount=Sum('charged_amount'))['total_amount'] or 0
-        total_penalt_amount = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').filter(txn_filter) \
-                                         .aggregate(total_amount=Sum('charged_amount'))['total_amount'] or 0
+        from ..services.transaction_metrics import with_payment_revenue
+        total_success_amount = with_payment_revenue(Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter)) \
+                                         .aggregate(total_amount=Sum('payment_revenue'))['total_amount'] or 0
+        from ..services.transaction_metrics import penalty_charge_expression
+        total_penalties = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='penalty').filter(txn_filter)
+        total_penalt_amount = with_payment_revenue(total_penalties).aggregate(total_amount=Sum(penalty_charge_expression()))['total_amount'] or 0
 
         data = {
             "total_success": total_success,
@@ -136,9 +138,10 @@ class WeeklySalesTrendView(APIView):
         if school is not None:
             txn_filter &= Q(student_or_staff__school=school)
 
-        sales_data = Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter) \
+        from ..services.transaction_metrics import with_payment_revenue
+        sales_data = with_payment_revenue(Transaction.objects.filter(transaction_date__date__gte=start_date, transaction_status='successful').filter(txn_filter)) \
                                         .values('transaction_date__date') \
-                                        .annotate(sales_amount=Sum('charged_amount')) \
+                                        .annotate(sales_amount=Sum('payment_revenue')) \
                                         .order_by('transaction_date__date')
 
         formatted_sales_data = [
@@ -315,24 +318,26 @@ class ChildSpendView(APIView):
         child_list = [r.student for r in relations]
 
         result = []
-        transactions = Transaction.objects.filter(
-            student_or_staff__in=child_list,
-            transaction_date__date__gte=start_date,
-        )
+        from ..services.transaction_metrics import with_payment_revenue
+        transactions = with_payment_revenue(Transaction.objects.filter(
+            student_or_staff__in=child_list, transaction_date__date__gte=start_date,
+            transaction_status__in=['successful', 'penalty'], is_voided=False,
+        ))
 
         for student in child_list:
             student_txns = transactions.filter(student_or_staff=student)
             aggregated = student_txns.aggregate(
-                total_spend=Sum('charged_amount'),
+                total_spend=Sum('payment_revenue'),
                 txn_count=Count('id'),
             )
+            from ..services.transaction_metrics import penalty_charge_expression
             penalty_amount = student_txns.filter(transaction_status='penalty').aggregate(
-                total=Sum('charged_amount')
+                total=Sum(penalty_charge_expression())
             )['total'] or 0
 
             items = student_txns.values('item_id').annotate(
                 quantity=Count('id'),
-                amount=Sum('charged_amount'),
+                amount=Sum('payment_revenue'),
             ).order_by('item_id')
 
             item_breakdown = []
