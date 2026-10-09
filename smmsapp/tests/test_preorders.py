@@ -2,12 +2,15 @@ from datetime import timedelta
 from datetime import date
 from decimal import Decimal
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
+from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db import transaction
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.db import close_old_connections, connections, transaction
+from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -338,3 +341,55 @@ class PreOrderServiceTests(TestCase):
             else:
                 release_preorder(order, actor=self.parent)
         self.assertEqual(check_ledger_integrity(persist=False)['status'], 'ok')
+
+
+@skipUnless(connections['default'].vendor == 'postgresql', 'pre-order row-lock race test requires PostgreSQL')
+@override_settings(PREORDER_CUTOFF_TIME='23:59', PREORDER_MAX_QTY_PER_ITEM=1)
+class ConcurrentPreOrderCreationTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        school = School.objects.create(name='Concurrent preorder school')
+        self.parent = User.objects.create_user(username='concurrent-preorder-parent', role='parent', school=school)
+        self.student = User.objects.create_user(username='concurrent-preorder-student', role='student', school=school)
+        ParentStudent.objects.create(parent=self.parent, student=self.student)
+        self.card = RFIDCard.objects.create(
+            card_number='CONCURRENT-PREORDER-CARD', control_number='CONCURRENT-PREORDER-CONTROL',
+            student_or_staff=self.student, balance=Decimal('1000.00'),
+        )
+        self.item = CanteenItem.objects.create(name='Concurrent preorder meal', price=Decimal('200.00'))
+        self.order_date = timezone.localdate() + timedelta(days=1)
+
+    def _place_in_worker(self, key, barrier):
+        close_old_connections()
+        try:
+            parent = User.objects.get(pk=self.parent.pk)
+            student = User.objects.get(pk=self.student.pk)
+            card = RFIDCard.objects.get(pk=self.card.pk)
+            item = CanteenItem.objects.get(pk=self.item.pk)
+            barrier.wait()
+            try:
+                order = place_preorder(
+                    student=student, card=card, order_date=self.order_date, meal_type='lunch',
+                    rows=[(item, 1, Decimal('200.00'))], idempotency_key=key, actor=parent,
+                )
+                return ('placed', str(order.pk))
+            except ValueError as exc:
+                return (str(exc), None)
+        finally:
+            connections.close_all()
+
+    def test_simultaneous_orders_for_same_student_meal_create_one_active_order(self):
+        barrier = threading.Barrier(2)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(
+                lambda key: self._place_in_worker(key, barrier),
+                ['parallel-preorder-a', 'parallel-preorder-b'],
+            ))
+
+        self.assertEqual([result[0] for result in results].count('placed'), 1, results)
+        self.assertEqual([result[0] for result in results].count('PREORDER_CONFLICT'), 1, results)
+        self.assertEqual(PreOrder.objects.filter(student=self.student, date=self.order_date, meal_type='lunch', status='placed').count(), 1)
+        self.card.refresh_from_db()
+        self.assertEqual(self.card.balance, Decimal('800.00'))
+        self.assertEqual(self.card.held_balance, Decimal('200.00'))
