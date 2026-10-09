@@ -4,11 +4,26 @@ from decimal import Decimal
 
 from django.db.models import Q, Sum
 
-from smmsapp.models import JournalLine
+from smmsapp.models import JournalEntry, JournalLine
 
 
 WALLET_ACCOUNT = "2000"
 HOLD_ACCOUNT = "2100"
+
+
+def journal_entries_for_school(school):
+    """Scope a school's ledger through the customer-bearing source of each entry.
+
+    Entries are selected as whole balanced journal entries so the counterpart
+    cash/revenue lines remain visible without exposing another school's rows.
+    """
+    return JournalEntry.objects.filter(
+        Q(lines__rfid_card__student_or_staff__school=school)
+        | Q(ref_transaction__student_or_staff__school=school)
+        | Q(ref_deposit__control_number__student_or_staff__school=school)
+        | Q(lines__fund__allocations__student__school=school)
+        | Q(created_by__school=school)
+    ).distinct()
 
 
 def card_statement_lines(card):

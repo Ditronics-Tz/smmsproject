@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_date
@@ -18,7 +20,7 @@ from smmsapp.permissions.features import FeatureEnabled
 from smmsapp.permissions.roles import IsAdminOnly
 from smmsapp.serializers.ledger import CardStatementLineSerializer, JournalEntrySerializer, TrialBalanceSerializer
 from smmsapp.services.ledger import check_ledger_integrity
-from smmsapp.services.ledger_reads import card_statement_lines
+from smmsapp.services.ledger_reads import card_statement_lines, journal_entries_for_school
 from smmsapp.utils import get_admin_scope
 
 
@@ -65,7 +67,7 @@ class JournalListView(APIView, LedgerPagination):
             entries = entries.filter(lines__rfid_card__card_number=card_number)
         school = get_admin_scope(request.user)
         if school is not None:
-            entries = entries.filter(lines__rfid_card__student_or_staff__school=school)
+            entries = entries.filter(pk__in=journal_entries_for_school(school).values('pk'))
         entries = entries.distinct()
         page = self.paginate_queryset(entries, request, view=self)
         return self.get_paginated_response(JournalEntrySerializer(page, many=True).data)
@@ -78,7 +80,7 @@ class JournalDetailView(APIView):
     def get(self, request, entry_id):
         entry = get_object_or_404(JournalEntry.objects.prefetch_related('lines__account', 'lines__rfid_card'), pk=entry_id)
         school = get_admin_scope(request.user)
-        if school is not None and not entry.lines.filter(rfid_card__student_or_staff__school=school).exists():
+        if school is not None and not journal_entries_for_school(school).filter(pk=entry.pk).exists():
             return Response({'detail': 'Entry not found.', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
         return Response(JournalEntrySerializer(entry).data)
 
@@ -117,6 +119,9 @@ class AccountStatementView(APIView, LedgerPagination):
         if error:
             return error
         lines = JournalLine.objects.filter(account=account).select_related('entry', 'account', 'rfid_card').filter(**date_filters).order_by('-created_at')
+        school = get_admin_scope(request.user)
+        if school is not None:
+            lines = lines.filter(entry__in=journal_entries_for_school(school))
         page = self.paginate_queryset(lines, request, view=self)
         return self.get_paginated_response(CardStatementLineSerializer(page, many=True).data)
 
@@ -131,6 +136,9 @@ class FundStatementView(APIView, LedgerPagination):
         if error:
             return error
         base_lines = JournalLine.objects.filter(fund=fund, account__code='2200')
+        school = get_admin_scope(request.user)
+        if school is not None:
+            base_lines = base_lines.filter(entry__in=journal_entries_for_school(school))
         start = parse_date(request.query_params.get('from')) if request.query_params.get('from') else None
         if start:
             opening = base_lines.filter(created_at__date__lt=start).aggregate(
@@ -164,16 +172,22 @@ class TrialBalanceView(APIView):
         if as_of_raw and as_of is None:
             return Response({'detail': '`as_of` must use YYYY-MM-DD.', 'code': 'INVALID_DATE'}, status=status.HTTP_400_BAD_REQUEST)
         lines = JournalLine.objects.all()
+        school = get_admin_scope(request.user)
+        if school is not None:
+            lines = lines.filter(entry__in=journal_entries_for_school(school))
         if as_of:
             lines = lines.filter(created_at__date__lte=as_of)
-        rows = []
-        for account in LedgerAccount.objects.order_by('code'):
-            totals = lines.filter(account=account).aggregate(
+        totals_by_account = {
+            row['account_id']: row for row in lines.values('account_id').annotate(
                 debit=Sum('amount', filter=Q(direction='debit')),
                 credit=Sum('amount', filter=Q(direction='credit')),
             )
-            debit = totals['debit'] or 0
-            credit = totals['credit'] or 0
+        }
+        rows = []
+        for account in LedgerAccount.objects.order_by('code'):
+            totals = totals_by_account.get(account.pk, {})
+            debit = Decimal(totals.get('debit') or 0).quantize(Decimal('0.01'))
+            credit = Decimal(totals.get('credit') or 0).quantize(Decimal('0.01'))
             rows.append({'account': account.code, 'name': account.name, 'debit': str(debit), 'credit': str(credit), 'net': str(credit - debit)})
         return Response({'as_of': as_of.isoformat() if as_of else None, 'accounts': rows})
 
