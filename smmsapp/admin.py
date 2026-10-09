@@ -1,7 +1,12 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
-from .models import CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification, CanteenItem, ScanSession, ScannedData, School, LedgerEntry, Reversal, Reconciliation, ReplacementLink, PasswordResetToken, AuditLog, SMSLog
+from .models import (
+    CustomUser, BankDeposit, Transaction, ParentStudent, RFIDCard, Notification,
+    CanteenItem, ScanSession, ScannedData, School, LedgerEntry, Reversal,
+    Reconciliation, ReplacementLink, PasswordResetToken, AuditLog, SMSLog,
+    JournalEntry, JournalLine, LedgerAccount,
+)
 
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
@@ -45,4 +50,25 @@ class SMSLogAdmin(admin.ModelAdmin):
     list_filter = ('status','provider')
     search_fields = ('phone','recipient__username')
     readonly_fields = ('id','recipient','notification','phone','body','provider','provider_sid','status','error','segments','cost_estimate','created_at','sent_at')
+
+
+class ReadOnlyLedgerAdmin(admin.ModelAdmin):
+    """Expose immutable ledger records for inspection, never mutation."""
+
+    def get_readonly_fields(self, request, obj=None):
+        return tuple(field.name for field in self.model._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+admin.site.register(LedgerAccount, ReadOnlyLedgerAdmin)
+admin.site.register(JournalEntry, ReadOnlyLedgerAdmin)
+admin.site.register(JournalLine, ReadOnlyLedgerAdmin)
 
