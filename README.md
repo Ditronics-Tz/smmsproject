@@ -17,11 +17,9 @@ A web service for managing student meals, built with Django and PostgreSQL. This
 ---
 ## Installation & Setup
 ### Prerequisites
-Ensure you have the following installed:
-- Python (>= 3.8)
-- Docker & Docker Compose
-- PostgreSQL
-- Nginx (for production deployment)
+Ensure you have Docker Engine and the Docker Compose v2 plugin installed.
+For local development without containers, use the Python version in
+`Containerfile` plus PostgreSQL and Redis.
 
 ### Clone the Repository
 ```bash
@@ -30,22 +28,24 @@ cd smmsproject
 ```
 
 ### Setup Environment Variables
-Create a `.env` file in the root directory:
+Copy the checked-in template, then replace the sample secrets and hostnames.
+The Compose stack reads `DB_*` (not `DATABASE_*`) and requires both
+`SECRET_KEY` and `DB_PASSWORD`:
 ```env
-DEBUG=False
-SECRET_KEY=your_secret_key
-DATABASE_NAME=student_meal_db
-DATABASE_USER=postgres
-DATABASE_PASSWORD=your_password
-DATABASE_HOST=db
-DATABASE_PORT=5432
-ALLOWED_HOSTS=*
 ```
+```bash
+cp .env.example .env
+```
+For a local Docker run, keep `DB_HOST=db` and set `ALLOWED_HOSTS` to
+`localhost,127.0.0.1`. Do not use `ALLOWED_HOSTS=*`.
 
 ### Build and Run with Docker
 ```bash
-docker-compose up --build -d
+docker compose up --build -d
 ```
+
+The first start applies database migrations through the container entrypoint.
+To inspect startup or troubleshoot, run `docker compose logs -f web`.
 
 The application should now be running on `http://localhost:8000/`.
 
@@ -86,7 +86,7 @@ sudo systemctl restart nginx
 
 ### Running in Production
 ```bash
-docker-compose -f docker-compose.prod.yml up --build -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 ```
 
 ---
@@ -96,8 +96,8 @@ docker-compose -f docker-compose.prod.yml up --build -d
    ```bash
    git add .
    git commit -m [write-comment]
-   git push origin master
-   then merge with main
+   git push origin <your-feature-branch>
+   # Open a pull request into main and merge after checks pass.
    ```
 
 2. Set up GitHub Actions workflow (`.github/workflows/deploy.yml`):
@@ -122,7 +122,7 @@ docker-compose -f docker-compose.prod.yml up --build -d
              script: |
                cd /path/to/project
                git pull origin main
-               docker-compose -f docker-compose.prod.yml up --build -d
+               docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
    ```
 
 ### Environment Variables in GitHub Secrets
@@ -188,6 +188,7 @@ This section documents every environment variable required to deploy the SMMS sy
 | `FIREBASE_API_KEY` | *(empty)* | Firebase API key | Get from Firebase console |
 | `FIREBASE_SENDER_ID` | *(empty)* | Firebase sender ID | Get from Firebase console |
 | `FIREBASE_PROJECT_ID` | *(empty)* | Firebase project ID | Get from Firebase console |
+| `FIREBASE_SERVICE_ACCOUNT_FILE` | *(unset)* | Optional path to service-account JSON for push tasks | Configure only when using Firebase push |
 
 ### Email (outgoing email notifications)
 
@@ -213,20 +214,47 @@ This section documents every environment variable required to deploy the SMMS sy
 | `DJANGO_SUPERUSER_EMAIL` | `admin@smms.local` | Email for auto-created superuser | Set your email (dev only) |
 | `DJANGO_SUPERUSER_PASSWORD` | `Admin123!` | Password for auto-created superuser | Set your password (dev only) |
 
+### Feature, operations, and preorder settings
+
+These optional variables are also read by Django settings. Leave the example
+values in place unless the deployment needs a different policy.
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `NUM_PROXIES` | `0` | Trusted reverse-proxy hops; only raise when the edge overwrites forwarding headers |
+| `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE` | `True` | Send session/CSRF cookies over HTTPS only |
+| `CELERY_TIMEZONE` | `Africa/Dar_es_Salaam` | Timezone used by scheduled jobs |
+| `MENU_ENFORCED`, `STOCK_ENFORCED` | `False` | Enforce menu availability and stock checks |
+| `SPONSOR_FALLBACK_TO_WALLET` | `True` | Allow wallet fallback when sponsorship does not cover an item |
+| `RFID_BALANCE_FLOOR` | `-500.00` | Lowest permitted wallet balance |
+| `PENALTY_FEE`, `STRIKE_LIMIT`, `STRIKE_RESET_ON_DEPOSIT` | `500.00`, `10`, `False` | Strike and insufficient-balance penalty policy |
+| `SCAN_THROTTLE_RATE` | `120` | Maximum scans per operator per minute |
+| `AUDIT_RETENTION_DAYS` | `365` | Audit-log retention period |
+| `SMS_PROVIDER` | `log` | SMS adapter: `log`, `twilio`, or `beem` |
+| `SMS_DAILY_LIMIT`, `SMS_MONTHLY_LIMIT` | `3`, `10000` | SMS sending limits |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | unset | Twilio credentials/sender; needed only with Twilio |
+| `BEEM_API_KEY`, `BEEM_SECRET_KEY`, `BEEM_SENDER_ID` | unset, unset, `SMMS` | Beem credentials/sender; needed only with Beem |
+| `PREORDER_TIME_ZONE`, `PREORDER_CUTOFF_TIME` | `Africa/Dar_es_Salaam`, `18:00` | Local timezone and previous-day preorder cutoff |
+| `PREORDER_MAX_DAYS_AHEAD`, `PREORDER_MAX_QTY_PER_ITEM` | `1`, `1` | Preorder horizon and per-item quantity cap |
+| `PREORDER_NOSHOW_FEE`, `PREORDER_REMINDER_ENABLED` | `0.00`, `False` | No-show fee and optional reminder toggle |
+| `FEATURES_DEFAULT` | `{}` | JSON object of deployment-level feature defaults |
+
+The `SCHOOL_SYSTEM_*` variables configure the optional CSV integration adapter;
+their full list and sync schedule are documented in `.env.example` and
+[`docs/integrations.md`](docs/integrations.md).
+
 ### Branding & Visual Identity (optional overrides)
 
 | Env Var | Default | Description | Override |
 |---------|---------|-------------|----------|
-| `BRAND_NAME` | `Student Meal Management System` | Display name shown in the UI | Set your organization's name |
-| `BRAND_LOGO_URL` | *(empty)* | URL for a custom logo image | Set to a publicly accessible URL |
-| `BRAND_PRIMARY_COLOR` | *(empty)* | Primary color (hex, e.g. `#2a7ae2`) | Set your brand color |
-| `BRAND_CURRENCY` | `Tsh` | Currency display code | Set your currency symbol/Code |
-| `SUPPORT_CONTACT` | *(empty)* | Support contact email/phone | Set your support contact information |
+| `APP_NAME`, `APP_SHORT_NAME` | `Student Meal Management System`, `SMMS` | Public application names | Set the organization/product name |
+| `CURRENCY_CODE`, `CURRENCY_SYMBOL`, `CURRENCY_DECIMALS` | `TZS`, `TSh`, `2` | Public currency formatting | Set the deployment currency |
+| `APP_LOCALE` | `en-TZ` | Locale advertised by public config | Set the desired locale |
 
 > **How to override without touching code:**
 > 1. Copy `.env.example` to `.env`
-> 2. Set each variable for your organization
-> 3. Run `docker-compose up --build -d` (or `make prod-setup`)
+> 2. Replace the required sample secrets and set host/origin values for your organization
+> 3. Run `docker compose up --build -d` (or `make prod-setup`)
 > 4. All changes are purely environment-driven — no Python files need modification
 
 ### Example `.env` for a new organization
@@ -242,6 +270,8 @@ API_BASE_URL=https://app.your-org.com
 DB_NAME=your_db_name
 DB_USER=your_db_user
 DB_PASSWORD=your_secure_db_password
+DB_HOST=db
+DB_PORT=5432
 
 # CORS / CSRF
 CORS_ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
@@ -257,9 +287,11 @@ EMAIL_HOST_USER=your_sendgrid_user
 EMAIL_HOST_PASSWORD=your_sendgrid_password
 
 # Branding
-BRAND_NAME=Your Organization Name
-BRAND_CURRENCY=USD
-SUPPORT_CONTACT=support@your-org.com
+APP_NAME=Your Organization Name
+APP_SHORT_NAME=Your App
+CURRENCY_CODE=TZS
+CURRENCY_SYMBOL=TSh
+APP_LOCALE=en-TZ
 ```
 
 ---
