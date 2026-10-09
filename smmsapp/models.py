@@ -37,6 +37,7 @@ class School(models.Model):
     number = models.IntegerField(unique=True, blank=True, null=True)
     name = models.CharField(max_length=255, unique=True)
     location = models.CharField(max_length=255, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
 # function to generate school number
@@ -112,7 +113,7 @@ class RFIDCard(models.Model):
     uid_hex = models.CharField(max_length=20, unique=True, null=True, blank=True)
     student_or_staff = models.ForeignKey(
         CustomUser,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         limit_choices_to={'role__in': ['student', 'staff']},
         related_name='rfid_cards',
         help_text='Owner of the card. A student/staff may have multiple cards',
@@ -153,8 +154,8 @@ class ReplacementLink(models.Model):
     the new card. This row preserves the old -> new linkage for traceability.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    old_card = models.OneToOneField(RFIDCard, on_delete=models.CASCADE, related_name='replaced_by')
-    new_card = models.OneToOneField(RFIDCard, on_delete=models.CASCADE, related_name='replacement_of')
+    old_card = models.OneToOneField(RFIDCard, on_delete=models.PROTECT, related_name='replaced_by')
+    new_card = models.OneToOneField(RFIDCard, on_delete=models.PROTECT, related_name='replacement_of')
     replaced_by = models.ForeignKey(
         CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='card_replacements', help_text='Admin who performed the replacement',
@@ -179,7 +180,7 @@ class BankDeposit(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    control_number = models.ForeignKey(RFIDCard, on_delete=models.CASCADE, to_field='control_number')
+    control_number = models.ForeignKey(RFIDCard, on_delete=models.PROTECT, to_field='control_number')
     # student_or_ = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='cash')
@@ -327,9 +328,9 @@ class Transaction(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    student_or_staff = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
-    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
-    item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE)
+    student_or_staff = models.ForeignKey(CustomUser, on_delete=models.PROTECT, limit_choices_to={'role__in': ['student', 'staff']})
+    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.PROTECT)
+    item = models.ForeignKey(CanteenItem, on_delete=models.PROTECT)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     charged_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     transaction_date = models.DateTimeField(auto_now_add=True)
@@ -388,10 +389,10 @@ class Notification(models.Model):
 # ---- SCANNED DATA TABLE -----
 class ScannedData(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    session = models.ForeignKey(ScanSession, on_delete=models.CASCADE)  # Links to active session
-    student_or_staff = models.ForeignKey(CustomUser, on_delete=models.CASCADE, limit_choices_to={'role__in': ['student', 'staff']})
-    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE)
-    item = models.ForeignKey(CanteenItem, on_delete=models.CASCADE, null=True, blank=True)
+    session = models.ForeignKey(ScanSession, on_delete=models.PROTECT)  # Preserve scan evidence
+    student_or_staff = models.ForeignKey(CustomUser, on_delete=models.PROTECT, limit_choices_to={'role__in': ['student', 'staff']})
+    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.PROTECT)
+    item = models.ForeignKey(CanteenItem, on_delete=models.PROTECT, null=True, blank=True)
     scanned_at = models.DateTimeField(auto_now_add=True)
     SCAN_SOURCE_CHOICES = [('usb', 'USB'), ('nfc', 'NFC'), ('manual', 'Manual')]
     scan_source = models.CharField(max_length=10, choices=SCAN_SOURCE_CHOICES, default='usb')
@@ -453,7 +454,7 @@ class LedgerEntry(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.CASCADE, db_index=True)
+    rfid_card = models.ForeignKey(RFIDCard, on_delete=models.PROTECT, db_index=True)
     event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
     amount = models.DecimalField(max_digits=10, decimal_places=2)  # signed: negative for purchases/penalties, positive for deposits/reversals
     balance_before = models.DecimalField(max_digits=10, decimal_places=2)
@@ -721,7 +722,7 @@ class PasswordResetToken(models.Model):
 # ------ REVERSAL TABLE ------
 class Reversal(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    transaction = models.OneToOneField(Transaction, on_delete=models.CASCADE, unique=True)
+    transaction = models.OneToOneField(Transaction, on_delete=models.PROTECT, unique=True)
     reversed_by = models.ForeignKey(
         CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='reversals', help_text='Operator/admin who voided the transaction'

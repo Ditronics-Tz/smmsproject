@@ -22,12 +22,14 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 from django.db import connections
 from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
 from ..models import (
     CanteenItem,
+    BankDeposit,
     ParentStudent,
     RFIDCard,
     ScanSession,
@@ -305,6 +307,17 @@ class DeleteGuardTests(IntegrityBase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(School.objects.filter(id=empty.id).exists())
 
+    def test_force_delete_school_soft_deactivates_and_keeps_users_attached(self):
+        self.authenticate(self.admin)
+        response = self.api.post(
+            "/resources/delete-school?force=true", {"school_id": str(self.school.id)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.school.refresh_from_db()
+        self.student.refresh_from_db()
+        self.assertFalse(self.school.is_active)
+        self.assertEqual(self.student.school_id, self.school.id)
+
     def test_delete_item_blocked_with_transaction_history(self):
         self.authenticate(self.admin)
         Transaction.objects.create(
@@ -342,6 +355,39 @@ class DeleteGuardTests(IntegrityBase):
         response = self.api.post("/resources/delete-card", {"card_id": str(fresh.id)})
         self.assertEqual(response.status_code, 200)
         self.assertFalse(RFIDCard.objects.filter(id=fresh.id).exists())
+
+    def test_card_with_deposit_history_is_protected_at_database_layer(self):
+        BankDeposit.objects.create(control_number=self.card, amount=Decimal("1000.00"))
+        with self.assertRaises(ProtectedError):
+            self.card.delete()
+
+    def test_user_with_card_history_cannot_be_deleted(self):
+        Transaction.objects.create(
+            student_or_staff=self.student,
+            rfid_card=self.card,
+            item=self.item,
+            amount=self.item.price,
+            transaction_status="successful",
+        )
+        with self.assertRaises(ProtectedError):
+            self.student.delete()
+
+    def test_force_delete_card_option_is_a_soft_deactivation(self):
+        Transaction.objects.create(
+            student_or_staff=self.student,
+            rfid_card=self.card,
+            item=self.item,
+            amount=self.item.price,
+            transaction_status="successful",
+        )
+        self.authenticate(self.admin)
+        response = self.api.post(
+            "/resources/delete-card?force=true", {"card_id": str(self.card.id)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.card.refresh_from_db()
+        self.assertFalse(self.card.is_active)
+        self.assertTrue(Transaction.objects.filter(rfid_card=self.card).exists())
 
 
 @skipUnless(connections['default'].vendor == 'postgresql', 'select_for_update concurrency requires PostgreSQL')

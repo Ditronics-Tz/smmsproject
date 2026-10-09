@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, DjangoModelPermissionsOrAnonReadOnly, IsAuthenticated
 from django.db.models import Q
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from ..services.audit import log_action, snapshot
@@ -81,19 +82,25 @@ class DeleteSchoolView(APIView):
                     "attached_users": attached_count,
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Perform delete (hard if force=True/absent, soft auditorium otherwise)
-            # Since school.has_no_strict_cascade, a hard delete will SET_NULL the
-            # school field on attached CustomUser rows. We log the outcome.
             before = snapshot(school)
-            school.delete()
-            try:
-                log_action('delete', obj=school, before=before)
-            except Exception:
-                pass
-            action = "forced_hard_delete" if force else "blocked_then_hard_delete"
+            if force:
+                school.is_active = False
+                school.save(update_fields=["is_active"])
+                try:
+                    log_action('deactivate', obj=school, before=before, after=snapshot(school))
+                except Exception:
+                    pass
+                action = "soft_deactivate"
+            else:
+                school.delete()
+                try:
+                    log_action('delete', obj=school, before=before)
+                except Exception:
+                    pass
+                action = "hard_delete"
             return Response({
                 "code": 200,
-                "message": f"School forcibly deleted with {attached_count} attached users (school field SET_NULL on CustomUser rows)." if force
+                "message": "School deactivated; its users and history remain linked." if force
                           else "School deleted successfully.",
                 "school_id": school_id,
                 "attached_users_before_delete": attached_count,
@@ -101,6 +108,8 @@ class DeleteSchoolView(APIView):
                 "audited": True,
             }, status=status.HTTP_200_OK)
 
+        except ProtectedError:
+            return Response({"code": 400, "message": "Cannot delete school: financial or operational history is linked to it. Deactivate or reassign the records first."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
 
@@ -381,6 +390,8 @@ class DeleteItemView(APIView):
                 "audited": True,
             }, status=status.HTTP_200_OK)
 
+        except ProtectedError:
+            return Response({"code": 400, "message": "Cannot delete card: financial or audit history is linked to it. Deactivate the card instead."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
 
@@ -612,6 +623,8 @@ class DeleteCardView(APIView):
                 "audited": True,
             }, status=status.HTTP_200_OK)
 
+        except ProtectedError:
+            return Response({"code": 400, "message": "Cannot delete item: financial or operational history is linked to it. Deactivate the item instead."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"code": 500, "message": f"General System error - {e}"})
 
