@@ -51,20 +51,19 @@ class CreateDepositView(APIView):
         serializer = CreateDepositSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(
-                {'code': 400, 'message': serializer.errors},
+                {**error_response(ErrorCode.INVALID_REQUEST, status.HTTP_400_BAD_REQUEST).data,
+                 'errors': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         data = serializer.validated_data
         card_number = data['card_number']
 
         # Validate the card exists and user has access (parent via ParentStudent, or staff)
-        try:
-            rfid_card = RFIDCard.objects.get(card_number=card_number, is_active=True)
-        except RFIDCard.DoesNotExist:
-            return Response(
-                {'code': 404, 'message': 'Invalid or inactive RFID card'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        rfid_card = RFIDCard.objects.filter(card_number=card_number).first()
+        if rfid_card is None:
+            return error_response(ErrorCode.CARD_NOT_FOUND, status.HTTP_404_NOT_FOUND)
+        if not rfid_card.is_active:
+            return error_response(ErrorCode.CARD_INACTIVE, status.HTTP_404_NOT_FOUND)
 
         # Check parent/staff access: parent must be linked via ParentStudent, or user is staff
         if user.role != 'staff':
@@ -74,10 +73,7 @@ class CreateDepositView(APIView):
                 parent=user, student=rfid_card.student_or_staff
             ).exists()
             if not has_access:
-                return Response(
-                    {'code': 403, 'message': 'You do not have access to this card'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+                return error_response(ErrorCode.CARD_ACCESS_DENIED, status.HTTP_403_FORBIDDEN)
 
         # Create the pending deposit
         deposit = BankDeposit.objects.create(
@@ -160,7 +156,11 @@ class ProcessDepositView(APIView):
     def post(self, request):
         serializer = ProcessDepositSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {**error_response(ErrorCode.INVALID_REQUEST, status.HTTP_400_BAD_REQUEST).data,
+                 'errors': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         deposit_id = serializer.validated_data['deposit_id']
         action = serializer.validated_data['action']
@@ -381,7 +381,11 @@ class ReverseTransactionView(APIView):
     def post(self, request):
         serializer = ReversalSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {**error_response(ErrorCode.INVALID_REQUEST, status.HTTP_400_BAD_REQUEST).data,
+                 'errors': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         transaction_id = serializer.validated_data['transaction_id']
         reason = serializer.validated_data['reason']

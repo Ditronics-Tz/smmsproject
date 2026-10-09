@@ -765,7 +765,11 @@ class ReplaceCardView(APIView):
 
         serializer = self.serializer_class(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {**error_response(ErrorCode.INVALID_REQUEST, status.HTTP_400_BAD_REQUEST).data,
+                 'errors': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         old_card_id = serializer.validated_data['old_card_id']
         new_card_number = serializer.validated_data.get('new_card_number', '').strip()
@@ -780,10 +784,7 @@ class ReplaceCardView(APIView):
                 try:
                     old_card = RFIDCard.objects.select_for_update().get(id=old_card_id)
                 except RFIDCard.DoesNotExist:
-                    return Response(
-                        {"code": 404, "message": "Card not found"},
-                        status=status.HTTP_404_NOT_FOUND,
-                    )
+                    return error_response(ErrorCode.CARD_NOT_FOUND, status.HTTP_404_NOT_FOUND)
 
                 # Idempotency guard: old card must still be active to replace it.
                 if not old_card.is_active:

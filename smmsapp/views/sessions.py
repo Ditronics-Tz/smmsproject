@@ -40,7 +40,11 @@ class ScanRFIDCardView(APIView):
 
         request_serializer = ScanRFIDRequestSerializer(data=request.data)
         if not request_serializer.is_valid():
-            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {**error_response(ErrorCode.INVALID_REQUEST, status.HTTP_400_BAD_REQUEST).data,
+                 'errors': request_serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         session_id = request.data.get('session_id')
         has_card_number = 'card_number' in request.data
@@ -441,14 +445,15 @@ class EndScanSessionView(APIView):
             session_id = request.data.get('session_id')
 
             if user.role != 'operator':
-                return Response({'code': 403, 'message': 'Only operators can end a session'}, status=status.HTTP_403_FORBIDDEN)
+                return error_response(ErrorCode.NOT_SESSION_OPERATOR, status.HTTP_403_FORBIDDEN)
             
             try:
                 session = ScanSession.objects.get(id=session_id, operator=user, status='active')
             except ScanSession.DoesNotExist:
                 # Distinguish an existing active session owned by someone else.
                 if ScanSession.objects.filter(id=session_id, status='active').exists():
-                    return error_response(ErrorCode.NOT_SESSION_OPERATOR, status.HTTP_403_FORBIDDEN)
+                    # Keep the endpoint's prior 404 ownership-masking behavior.
+                    return error_response(ErrorCode.NOT_SESSION_OPERATOR, status.HTTP_404_NOT_FOUND)
                 return error_response(ErrorCode.SESSION_NOT_ACTIVE, status.HTTP_404_NOT_FOUND)
 
             # ---- RECONCILIATION: compute scanned value, ask operator for expected cash ----

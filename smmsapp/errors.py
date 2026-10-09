@@ -19,6 +19,8 @@ class ErrorCode(str, Enum):
     DUPLICATE_CARD_NUMBER = 'DUPLICATE_CARD_NUMBER'
     DAILY_LIMIT = 'DAILY_LIMIT'
     ITEM_BLOCKED = 'ITEM_BLOCKED'
+    INVALID_REQUEST = 'INVALID_REQUEST'
+    CARD_ACCESS_DENIED = 'CARD_ACCESS_DENIED'
 
 
 DEFAULT_DETAILS = {
@@ -35,6 +37,8 @@ DEFAULT_DETAILS = {
     ErrorCode.DUPLICATE_CARD_NUMBER: 'The card number is already in use.',
     ErrorCode.DAILY_LIMIT: 'This purchase would exceed the student\'s daily spending limit.',
     ErrorCode.ITEM_BLOCKED: 'This item is blocked by the student\'s parent.',
+    ErrorCode.INVALID_REQUEST: 'One or more request fields are invalid.',
+    ErrorCode.CARD_ACCESS_DENIED: 'You do not have access to this card.',
 }
 
 

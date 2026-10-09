@@ -65,3 +65,5 @@ HTTP status codes while their codes are migrated to this catalog.
 | `ALREADY_REVERSED` | The transaction already has a reversal. | 409 |
 | `DUPLICATE_CARD_NUMBER` | The replacement card number is already registered. | 400 |
 | `INSUFFICIENT_BALANCE_PENALTY` | Not an error response: scan succeeds with `status: "penalty"` when the meal is served with a penalty. | 201 success |
+| `INVALID_REQUEST` | Request fields failed validation; field-level details are included in `errors`. | 400 |
+| `CARD_ACCESS_DENIED` | The caller is not linked to the card owner. | 403 |
