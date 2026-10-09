@@ -10,10 +10,14 @@ from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
+from django.http import HttpResponse
+from django.utils.html import escape
+from django.utils.dateparse import parse_date
 
 from ..models import (
     RFIDCard, BankDeposit, Transaction, LedgerEntry,
     ScanSession, Reconciliation, Reversal, CustomUser,
+    ParentStudent,
 )
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 from ..serializers.system import CodeMessageSerializer
@@ -27,6 +31,8 @@ from ..serializers.wallet import (
     ReconciliationSerializer, ReversalSerializer, CardLedgerViewSerializer,
     CardLedgerPagination,
 )
+from ..services.ledger_reads import add_months, statement_period
+from ..utils import get_admin_scope
 
 
 # ---------------------------
@@ -279,6 +285,90 @@ class CardLedgerView(generics.ListAPIView):
         return LedgerEntry.objects.filter(
             rfid_card__card_number=card_identifier
         ).order_by('timestamp')
+
+
+class ParentWalletStatementPDFView(APIView):
+    """Render a bounded parent/admin statement from immutable journal lines."""
+    permission_classes = [permissions.IsAuthenticated, FeatureEnabled('LEDGER_UI')]
+
+    @extend_schema(
+        tags=['wallet'],
+        parameters=[
+            OpenApiParameter('child_id', OpenApiTypes.UUID, required=True),
+            OpenApiParameter('from', OpenApiTypes.DATE, required=True),
+            OpenApiParameter('to', OpenApiTypes.DATE, required=True),
+        ],
+        responses={200: OpenApiTypes.BINARY, 400: CodeMessageSerializer, 403: CodeMessageSerializer, 404: CodeMessageSerializer},
+    )
+    def get(self, request):
+        child_id = request.query_params.get('child_id')
+        date_from_raw = request.query_params.get('from')
+        date_to_raw = request.query_params.get('to')
+        date_from = parse_date(date_from_raw) if date_from_raw else None
+        date_to = parse_date(date_to_raw) if date_to_raw else None
+        if not child_id or not date_from_raw or not date_to_raw:
+            return Response({'detail': 'child_id, from and to are required.', 'code': 'INVALID_STATEMENT_REQUEST'}, status=400)
+        if date_from_raw and date_from is None or date_to_raw and date_to is None:
+            return Response({'detail': 'Dates must use YYYY-MM-DD.', 'code': 'INVALID_DATE'}, status=400)
+        if date_from > date_to:
+            return Response({'detail': '`from` must be on or before `to`.', 'code': 'INVALID_DATE_RANGE'}, status=400)
+        if date_to > add_months(date_from, 12):
+            return Response({'detail': 'Statement date range cannot exceed 12 months.', 'code': 'STATEMENT_RANGE_TOO_LONG'}, status=400)
+
+        try:
+            child_id = CustomUser._meta.pk.to_python(child_id)
+        except (TypeError, ValueError):
+            return Response({'detail': 'child_id must be a valid UUID.', 'code': 'INVALID_CHILD_ID'}, status=400)
+        child = get_object_or_404(CustomUser, pk=child_id, role='student')
+        if request.user.role == 'parent':
+            if not ParentStudent.objects.filter(parent=request.user, student=child).exists():
+                return Response({'detail': 'Access denied.', 'code': 'FORBIDDEN'}, status=403)
+        elif request.user.role == 'admin':
+            school = get_admin_scope(request.user)
+            if school is not None and child.school_id != school.id:
+                return Response({'detail': 'Child not found.', 'code': 'NOT_FOUND'}, status=404)
+        else:
+            return Response({'detail': 'Access denied.', 'code': 'FORBIDDEN'}, status=403)
+
+        card = RFIDCard.objects.filter(student_or_staff=child).order_by('-is_active', '-created_at').first()
+        if card is None:
+            return Response({'detail': 'No card exists for this child.', 'code': 'CARD_NOT_FOUND'}, status=404)
+        statement = statement_period(card, date_from, date_to)
+        table_rows = ''.join(
+            '<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
+                escape(row['time'].strftime('%Y-%m-%d %H:%M')),
+                escape(row['event']), escape(row['memo']), escape(row['account']),
+                escape(row['direction']), escape(str(row['amount'])),
+                escape(str(row['wallet_balance'])),
+            )
+            for row in statement['lines']
+        )
+        html = """<!doctype html><html><head><meta charset="utf-8"><style>
+        body {{ font-family: sans-serif; font-size: 10pt; color: #222; }}
+        h1 {{ font-size: 18pt; }} table {{ width: 100%; border-collapse: collapse; }}
+        th, td {{ border: 1px solid #bbb; padding: 5px; text-align: left; }}
+        th {{ background: #eee; }} .totals {{ margin: 12px 0; }}
+        </style></head><body>
+        <h1>Wallet statement</h1>
+        <p>Child: {child}</p><p>Card: {card}</p><p>Period: {start} to {end}</p>
+        <div class="totals"><p>Opening wallet balance: TZS {opening}</p>
+        <p>Closing wallet balance: TZS {closing}</p>
+        <p>Opening pre-order hold: TZS {opening_hold}</p>
+        <p>Closing pre-order hold: TZS {closing_hold}</p></div>
+        <table><thead><tr><th>Time</th><th>Event</th><th>Description</th><th>Account</th>
+        <th>Direction</th><th>Amount</th><th>Wallet balance</th></tr></thead>
+        <tbody>{rows}</tbody></table></body></html>""".format(
+            child=escape(child.get_full_name() or child.username), card=escape(card.card_number),
+            start=date_from.isoformat(), end=date_to.isoformat(),
+            opening=escape(str(statement['opening_balance'])), closing=escape(str(statement['closing_balance'])),
+            opening_hold=escape(str(statement['opening_held_balance'])),
+            closing_hold=escape(str(statement['closing_held_balance'])), rows=table_rows,
+        )
+        from ..utils import _html_to_pdf
+        pdf_bytes = _html_to_pdf(html)
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="statement_{child.id}_{date_from}_{date_to}.pdf"'
+        return response
 
 
 # ---------------------------

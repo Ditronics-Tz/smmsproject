@@ -9,6 +9,7 @@ urlpatterns = [
 
     # ------- Ledger (chronological audit trail) -------
     path('ledger/card', wallet_views.CardLedgerView.as_view(), name='card-ledger'),
+    path('statement.pdf', wallet_views.ParentWalletStatementPDFView.as_view(), name='wallet-statement-pdf'),
 
     # ------- Transaction reversal (void) -------
     path('transaction/reverse', wallet_views.ReverseTransactionView.as_view(), name='reverse-transaction'),

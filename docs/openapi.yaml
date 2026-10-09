@@ -3533,6 +3533,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCardLedgerViewList'
           description: ''
+  /api/v1/wallet/statement.pdf:
+    get:
+      operationId: api_v1_wallet_statement.pdf_retrieve
+      description: Render a bounded parent/admin statement from immutable journal
+        lines.
+      parameters:
+      - in: query
+        name: child_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - wallet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
   /api/v1/wallet/transaction/reverse:
     post:
       operationId: api_v1_wallet_transaction_reverse_create
@@ -6374,6 +6428,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedCardLedgerViewList'
+          description: ''
+  /wallet/statement.pdf:
+    get:
+      operationId: wallet_statement.pdf_retrieve
+      description: Render a bounded parent/admin statement from immutable journal
+        lines.
+      parameters:
+      - in: query
+        name: child_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        required: true
+      tags:
+      - wallet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
           description: ''
   /wallet/transaction/reverse:
     post:

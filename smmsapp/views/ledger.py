@@ -18,6 +18,7 @@ from smmsapp.permissions.features import FeatureEnabled
 from smmsapp.permissions.roles import IsAdminOnly
 from smmsapp.serializers.ledger import CardStatementLineSerializer, JournalEntrySerializer, TrialBalanceSerializer
 from smmsapp.services.ledger import check_ledger_integrity
+from smmsapp.services.ledger_reads import card_statement_lines
 from smmsapp.utils import get_admin_scope
 
 
@@ -101,7 +102,7 @@ class CardStatementView(APIView, LedgerPagination):
         date_filters, error = _date_filters(request.query_params, 'created_at')
         if error:
             return error
-        lines = JournalLine.objects.filter(rfid_card=card).select_related('entry', 'account').filter(**date_filters).order_by('-created_at')
+        lines = card_statement_lines(card).filter(**date_filters).order_by('-created_at')
         page = self.paginate_queryset(lines, request, view=self)
         return self.get_paginated_response(CardStatementLineSerializer(page, many=True).data)
 

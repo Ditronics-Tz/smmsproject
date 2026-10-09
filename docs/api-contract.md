@@ -124,3 +124,11 @@ separately from `/api/v1`). Authenticate with an admin-issued `X-API-Key` or
 limited to 500 rows. Responses contain `created`, `updated`, `failed`, and
 row-level `results`. Admin key, webhook, delivery-log, and sync-log management
 endpoints are under `/integrations/v1/admin/`.
+
+## Parent wallet statement
+
+`GET /api/v1/wallet/statement.pdf?child_id=<UUID>&from=YYYY-MM-DD&to=YYYY-MM-DD`
+returns a PDF statement for a linked child (or any child in scope for an admin).
+The range is inclusive and cannot exceed 12 calendar months. Opening/closing
+wallet balances and pre-order holds, plus the period's immutable journal lines,
+are read from the double-entry ledger.
