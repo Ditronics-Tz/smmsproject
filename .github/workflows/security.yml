@@ -37,6 +37,24 @@ jobs:
     env:
       SECRET_KEY: ci-test-key-not-for-production
       DB_PASSWORD: ci-test-password
+      DB_NAME: smms_test
+      DB_USER: postgres
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: smms_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d smms_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -49,7 +67,7 @@ jobs:
           sudo apt-get install --yes libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 libffi-dev shared-mime-info
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt
-      - run: python manage.py test --settings=smmsproject.test_settings
+      - run: python manage.py test --settings=smmsproject.postgres_test_settings
 
   secrets:
     runs-on: ubuntu-latest

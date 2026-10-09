@@ -402,7 +402,7 @@ class ScanConcurrencySerializationTests(TransactionTestCase):
 
     reset_sequences = True
 
-    N_WORKERS = 12
+    N_WORKERS = 20
 
     @classmethod
     def setUpClass(cls):
