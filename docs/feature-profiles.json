@@ -9,6 +9,6 @@
   },
   "full": {
     "description": "All available modules, including features whose APIs may be enabled in a later release.",
-    "enabled": ["ANALYTICS", "INSIGHTS", "LEDGER_UI", "PAYMENTS", "MENU", "PREORDER", "PREORDERS", "SPONSORSHIP", "INTEGRATIONS", "STOCK", "PARENT_LIMITS", "NFC_SCAN"]
+    "enabled": ["ANALYTICS", "INSIGHTS", "LEDGER_UI", "PAYMENTS", "MENU", "PREORDER", "SPONSORSHIP", "INTEGRATIONS", "STOCK", "PARENT_LIMITS", "NFC_SCAN"]
   }
 }

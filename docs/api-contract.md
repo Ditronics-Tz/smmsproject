@@ -60,6 +60,8 @@ Wallet transactions retain `charged_amount` as the actual wallet delta; the sess
 
 `FEATURES_DEFAULT` is a JSON object of supported feature keys to boolean deployment defaults. Missing database rows fall back to the environment value (or false). `GET /api/v1/config/features` requires authentication and returns `{ "features": { "KEY": true } }`. `PUT /api/v1/config/features/{key}` is superuser-only, accepts `{ "enabled": boolean }`, and returns the updated flag. Unknown keys return 404. Feature values are cached for up to 60 seconds and model updates invalidate the cache.
 
+The pre-order feature key is `PREORDER` throughout the API, settings, and profiles. An upgrade maps the former `PREORDERS` alias and its enabled state to `PREORDER`; the alias is no longer listed or accepted as a feature key.
+
 ## Backend feature enforcement
 
 Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the database override (or environment default) is off. Current gates are:

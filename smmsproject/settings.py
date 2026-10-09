@@ -183,9 +183,19 @@ STRIKE_LIMIT = int(os.getenv('STRIKE_LIMIT', '10'))
 STRIKE_RESET_ON_DEPOSIT = os.getenv('STRIKE_RESET_ON_DEPOSIT', 'False') == 'True'
 
 FEATURE_KEYS = (
-    'ANALYTICS', 'INSIGHTS', 'LEDGER_UI', 'PAYMENTS', 'MENU', 'PREORDER', 'PREORDERS',
+    'ANALYTICS', 'INSIGHTS', 'LEDGER_UI', 'PAYMENTS', 'MENU', 'PREORDER',
     'SPONSORSHIP', 'INTEGRATIONS', 'STOCK', 'PARENT_LIMITS', 'NFC_SCAN',
 )
+
+
+def _canonicalize_feature_defaults(values):
+    values = dict(values)
+    if 'PREORDERS' in values:
+        values.setdefault('PREORDER', values['PREORDERS'])
+        values.pop('PREORDERS')
+    return values
+
+
 try:
     _features_from_env = json.loads(os.getenv('FEATURES_DEFAULT', '{}'))
 except json.JSONDecodeError as exc:
@@ -195,6 +205,7 @@ if not isinstance(_features_from_env, dict) or any(
     for key, value in _features_from_env.items()
 ):
     raise ImproperlyConfigured('FEATURES_DEFAULT must be a JSON object of boolean values')
+_features_from_env = _canonicalize_feature_defaults(_features_from_env)
 unknown_feature_keys = set(_features_from_env) - set(FEATURE_KEYS)
 if unknown_feature_keys:
     raise ImproperlyConfigured(

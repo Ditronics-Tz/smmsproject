@@ -13,8 +13,7 @@ from smmsapp.permissions.features import FeatureEnabled
 User = get_user_model()
 FLAGS = {
     'ANALYTICS': False, 'INSIGHTS': False, 'LEDGER_UI': False,
-    'PAYMENTS': False, 'MENU': False, 'PREORDERS': False,
-    'PREORDER': False,
+    'PAYMENTS': False, 'MENU': False, 'PREORDER': False,
     'SPONSORSHIP': False, 'INTEGRATIONS': False, 'STOCK': False,
     'PARENT_LIMITS': False, 'NFC_SCAN': False,
 }
@@ -102,7 +101,7 @@ class FeatureEnforcementTests(TestCase):
         self.assertNotEqual(response.json().get('code'), 'FEATURE_DISABLED')
 
     def test_flags_without_implemented_routes_are_known_but_default_off(self):
-        for key in ('INSIGHTS', 'PREORDERS', 'SPONSORSHIP', 'INTEGRATIONS', 'STOCK'):
+        for key in ('INSIGHTS', 'SPONSORSHIP', 'INTEGRATIONS', 'STOCK'):
             with self.subTest(feature=key):
                 self.assertFalse(self.flags[key].enabled)
 
