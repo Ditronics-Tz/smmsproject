@@ -1,21 +1,32 @@
 # Security checks and endpoint review
 
-## Automated checks
+## Manual checks
 
-Pull requests and pushes run `pip-audit` against the exact pinned packages in
-`requirements.txt` and Gitleaks against the checked-out repository history.
-The requirements file pins the resolved runtime dependencies, so the audit is
-run with `--no-deps` to avoid a second, drifting resolver pass. An audit finding
-fails CI; package exceptions must be reviewed and recorded here with an owner
-and removal date rather than silently ignored.
+The GitHub Actions workflows were removed on 2026-10-09 at the repository
+owner's request. Pull requests and pushes therefore no longer run tests,
+dependency audits, secret scans, or schema-drift checks automatically. Before
+release, run these checks manually and review any findings:
+
+```sh
+python manage.py test smmsapp.tests
+make schema
+git diff --exit-code -- docs/openapi.yaml
+pip-audit -r requirements.txt --no-deps
+gitleaks git --redact --verbose --no-banner .
+```
+
+The requirements file pins direct packages; `--no-deps` keeps the audit aligned
+with those declared pins. Record any accepted finding here with an owner and
+removal date rather than silently ignoring it.
 
 The October 2026 baseline scan found advisories in aiohttp, Brotli, CairoSVG,
 Django, Django REST Framework, SimpleJWT, fonttools, idna, Markdown, Pillow,
 pyasn1, PyJWT, python-dotenv, requests, sqlparse, urllib3, and WeasyPrint. Their
 pins have been upgraded to pip-audit's fixed releases (Django to the supported
-5.2 LTS line); rerun the committed security workflow to confirm the clean
-baseline. Django 5.2 is an LTS release and supports the project's Python 3.12
-runtime. See the [Django 5.2 release notes](https://docs.djangoproject.com/en/5.2/releases/5.2/).
+5.2 LTS line). The last successful automated run was before the workflows were
+removed; repeat the manual commands above after dependency changes. Django 5.2
+is an LTS release and supports the project's Python 3.12 runtime. See the
+[Django 5.2 release notes](https://docs.djangoproject.com/en/5.2/releases/5.2/).
 
 ## Public or unauthenticated routes
 
@@ -56,8 +67,9 @@ warnings because the active environment did not enable HSTS, HTTPS redirect,
 or secure session/CSRF cookies. Set `SECURE_HSTS_SECONDS` (only after confirming
 the entire domain is HTTPS), `SECURE_SSL_REDIRECT=True` when ingress supports
 the configured trusted proxy header, and both secure-cookie variables to
-`True`. The committed CI check supplies those production-like settings and
-fails if a future configuration change introduces new deployment warnings.
+`True`. Previously the CI check supplied those production-like settings. Since
+CI was removed, run `python manage.py check --deploy` manually with the same
+production settings before each deployment.
 
 ## Accepted exposure and follow-up
 
