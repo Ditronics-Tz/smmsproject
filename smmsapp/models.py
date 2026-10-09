@@ -509,6 +509,7 @@ class JournalLine(models.Model):
     entry = models.ForeignKey(JournalEntry, on_delete=models.PROTECT, related_name='lines')
     account = models.ForeignKey(LedgerAccount, on_delete=models.PROTECT, related_name='lines')
     rfid_card = models.ForeignKey(RFIDCard, on_delete=models.PROTECT, null=True, blank=True, related_name='journal_lines')
+    fund = models.ForeignKey('SponsorFund', on_delete=models.PROTECT, null=True, blank=True, related_name='journal_lines')
     direction = models.CharField(max_length=6, choices=DIRECTIONS)
     amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     balance_after = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
@@ -579,6 +580,66 @@ class PreOrderItem(models.Model):
             models.CheckConstraint(check=Q(quantity__gt=0), name='preorder_item_quantity_positive'),
             models.CheckConstraint(check=Q(fulfilled_quantity__lte=F('quantity')), name='preorder_fulfilled_not_over_quantity'),
         ]
+
+
+class SponsorFund(models.Model):
+    STATUS_CHOICES = [('active', 'Active'), ('paused', 'Paused'), ('closed', 'Closed')]
+    name = models.CharField(max_length=150, unique=True)
+    sponsor_name = models.CharField(max_length=150)
+    contact = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    alert_threshold = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_sponsor_funds')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class FundContribution(models.Model):
+    METHOD_CHOICES = [('cash', 'Cash'), ('bank', 'Bank'), ('mobile_money', 'Mobile money')]
+    fund = models.ForeignKey(SponsorFund, on_delete=models.PROTECT, related_name='contributions')
+    amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES)
+    reference = models.CharField(max_length=150, blank=True)
+    received_at = models.DateTimeField()
+    recorded_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='recorded_fund_contributions')
+    journal_entry = models.ForeignKey(JournalEntry, on_delete=models.PROTECT, null=True, blank=True, related_name='fund_contributions')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SponsorshipAllocation(models.Model):
+    fund = models.ForeignKey(SponsorFund, on_delete=models.PROTECT, related_name='allocations')
+    student = models.ForeignKey(CustomUser, on_delete=models.PROTECT, related_name='sponsorship_allocations')
+    meal_types = models.JSONField(default=list)
+    daily_cap = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    per_meal_cap = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    valid_from = models.DateField()
+    valid_to = models.DateField(null=True, blank=True)
+    priority = models.PositiveIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['fund', 'student'], condition=Q(is_active=True), name='uniq_active_fund_student_allocation',
+        )]
+
+
+class TransactionPayment(models.Model):
+    SOURCE_CHOICES = [('wallet', 'Wallet'), ('fund', 'Fund'), ('preorder', 'Pre-order')]
+    transaction = models.ForeignKey(Transaction, on_delete=models.PROTECT, related_name='payment_parts')
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES)
+    fund = models.ForeignKey(SponsorFund, on_delete=models.PROTECT, null=True, blank=True, related_name='payments')
+    amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    journal_entry = models.ForeignKey(JournalEntry, on_delete=models.PROTECT, related_name='transaction_payments')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(
+            check=(Q(source='fund', fund__isnull=False) | (~Q(source='fund') & Q(fund__isnull=True))),
+            name='txn_payment_fund_source_matches',
+        )]
 
 
 # ------ RECONCILIATION TABLE ------
