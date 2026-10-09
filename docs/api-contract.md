@@ -44,7 +44,7 @@ the reset is audited with before/after state and reason.
 
 ## Error responses
 
-Errors use the existing numeric `code` and human-readable `message` response fields. Documented codes and meanings are listed in [error-codes.md](error-codes.md). Throttled requests return HTTP 429.
+Errors use `{ "detail": "English explanation", "code": "ERROR_CODE" }`. Documented codes and meanings are listed in [error-codes.md](error-codes.md). Existing HTTP status codes are preserved. A scan served under the insufficient-balance penalty policy is a successful response and reports `status: "penalty"`; it is not an error.
 
 ## Session close summary
 

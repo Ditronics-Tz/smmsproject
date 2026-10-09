@@ -33,6 +33,7 @@ from ..serializers.wallet import (
 )
 from ..services.ledger_reads import add_months, statement_period
 from ..utils import get_admin_scope
+from ..errors import ErrorCode, error_response
 
 
 # ---------------------------
@@ -169,20 +170,14 @@ class ProcessDepositView(APIView):
 
         # Idempotency guard: if already processed or failed, just return current state
         if deposit.status != 'pending':
-            return Response({
-                'code': 409,
-                'message': f'Deposit already {deposit.status}; no action taken',
-            }, status=status.HTTP_409_CONFLICT)
+            return error_response(ErrorCode.DEPOSIT_NOT_PENDING, status.HTTP_409_CONFLICT)
 
         if action == 'process':
             # Credit the card balance atomically with row lock
             with transaction.atomic():
                 deposit = BankDeposit.objects.select_for_update().get(pk=deposit.pk)
                 if deposit.status != 'pending':
-                    return Response({
-                        'code': 409,
-                        'message': f'Deposit already {deposit.status}; no action taken',
-                    }, status=status.HTTP_409_CONFLICT)
+                    return error_response(ErrorCode.DEPOSIT_NOT_PENDING, status.HTTP_409_CONFLICT)
                 rfid_card = RFIDCard.objects.select_for_update().get(
                     control_number=deposit.control_number_id
                 )
@@ -396,17 +391,11 @@ class ReverseTransactionView(APIView):
 
         # Idempotency guard 1: already voided?
         if txn.is_voided:
-            return Response({
-                'code': 409,
-                'message': 'This transaction has already been voided',
-            }, status=status.HTTP_409_CONFLICT)
+            return error_response(ErrorCode.ALREADY_REVERSED, status.HTTP_409_CONFLICT)
 
         # Idempotency guard 2: already has a Reversal row?
         if Reversal.objects.filter(transaction=txn).exists():
-            return Response({
-                'code': 409,
-                'message': 'A reversal record already exists for this transaction',
-            }, status=status.HTTP_409_CONFLICT)
+            return error_response(ErrorCode.ALREADY_REVERSED, status.HTTP_409_CONFLICT)
 
         with transaction.atomic():
             # Lock the card row so concurrent deposits/scans can't interfere

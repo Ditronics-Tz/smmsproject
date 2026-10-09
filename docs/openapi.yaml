@@ -9516,6 +9516,10 @@ components:
           type: array
           items: {}
           readOnly: true
+        status:
+          type: string
+          nullable: true
+          readOnly: true
         insufficient_meal_count:
           type: integer
           readOnly: true
@@ -9532,6 +9536,7 @@ components:
       - preorder_fulfilled
       - scanned_at
       - session
+      - status
       - strike_limit
       - student_name
     ScannedDataRequest:

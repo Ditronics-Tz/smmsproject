@@ -1,6 +1,8 @@
 # API error codes
 
-Error responses use a `code` (numeric for legacy codes, string for named contract errors) and a human-readable `message`.
+Error responses use the stable shape `{ "detail": "English explanation", "code": "ERROR_CODE" }`.
+Clients should branch on `code`, not the English text. Existing endpoints retain their
+HTTP status codes while their codes are migrated to this catalog.
 
 | Code | Meaning | HTTP status |
 | --- | --- | --- |
@@ -52,3 +54,14 @@ Error responses use a `code` (numeric for legacy codes, string for named contrac
 | `INVALID_PAGINATION` | Page and page_size must be positive integers. | 400 |
 | `INVALID_MENU_ITEMS` | Menu items must be unique active canteen items. | 400 |
 | 429 | The request was throttled. Retry after the indicated interval. | 429 |
+| `CARD_NOT_FOUND` | No card matches the supplied card identifier. | 404 |
+| `CARD_INACTIVE` | The card exists but is inactive. | 404 on scan; 400 on replacement |
+| `CARD_BLOCKED_STRIKES` | The card reached the configured insufficient-meal strike limit. | 403 |
+| `SESSION_NOT_ACTIVE` | The requested scan session is missing or not active. | 404 |
+| `NOT_SESSION_OPERATOR` | The caller is not the operator assigned to the session. | 404 where the existing endpoint masked ownership |
+| `DUPLICATE_ITEM_IN_SESSION` | This student/card already scanned the item in the session. | 400 |
+| `ITEM_INACTIVE` | The canteen item is missing or inactive. | 404 |
+| `DEPOSIT_NOT_PENDING` | The deposit has already been processed or failed. | 409 |
+| `ALREADY_REVERSED` | The transaction already has a reversal. | 409 |
+| `DUPLICATE_CARD_NUMBER` | The replacement card number is already registered. | 400 |
+| `INSUFFICIENT_BALANCE_PENALTY` | Not an error response: scan succeeds with `status: "penalty"` when the meal is served with a penalty. | 201 success |

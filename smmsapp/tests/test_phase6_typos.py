@@ -86,6 +86,7 @@ class ScanCardPenaltyStatusTests(Phase6ScanCardBase):
         # Student has 0 balance, item costs 2000 -> penalty branch.
         response = self._scan()
         self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["status"], "penalty")
         self.assertEqual(response.data["insufficient_meal_count"], 1)
         self.assertEqual(response.data["strike_limit"], 10)
 
@@ -98,6 +99,7 @@ class ScanCardPenaltyStatusTests(Phase6ScanCardBase):
 
         response = self._scan()
         self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["status"], "successful")
         self.assertEqual(response.data["insufficient_meal_count"], 0)
         self.assertEqual(response.data["strike_limit"], 10)
 

@@ -22,6 +22,7 @@ from ..utils import get_admin_scope
 from ..services.cards import normalize_uid
 from ..throttles import OperatorScanThrottle
 from django.conf import settings
+from ..errors import ErrorCode, error_response
 
 
 # --- API FOR SCAN RFID CARD ----- THIS IS THE MAIN FUNCTIONALITY OF THIS SYSTEM -----
@@ -73,13 +74,15 @@ class ScanRFIDCardView(APIView):
         try:
             session = ScanSession.objects.get(id=session_id, status='active')
         except ScanSession.DoesNotExist:
-            return Response({'code': 114, 'message': 'Active session not found'}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(ErrorCode.SESSION_NOT_ACTIVE, status.HTTP_404_NOT_FOUND)
 
         # Validate Canteen Item
         try:
             item = CanteenItem.objects.get(id=item_id)
         except CanteenItem.DoesNotExist:
-            return Response({'code': 116, 'message': 'Invalid canteen item'}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(ErrorCode.ITEM_INACTIVE, status.HTTP_404_NOT_FOUND)
+        if not item.is_active:
+            return error_response(ErrorCode.ITEM_INACTIVE, status.HTTP_404_NOT_FOUND)
 
         # The read-modify-write on rfid_card.balance must be atomic and hold a
         # row lock. Without it, two operators scanning the same card at once (or
@@ -92,10 +95,12 @@ class ScanRFIDCardView(APIView):
             # transaction so the balance read and deduct are race-free.
             try:
                 lookup = {'uid_hex': card_uid} if is_uid else {'card_number': card_number}
-                rfid_card = RFIDCard.objects.select_for_update().get(**lookup, is_active=True)
+                rfid_card = RFIDCard.objects.select_for_update().get(**lookup)
                 student_or_staff = rfid_card.student_or_staff
             except RFIDCard.DoesNotExist:
-                return Response({'code': 115, 'message': 'Invalid or inactive RFID card'}, status=status.HTTP_404_NOT_FOUND)
+                return error_response(ErrorCode.CARD_NOT_FOUND, status.HTTP_404_NOT_FOUND)
+            if not rfid_card.is_active:
+                return error_response(ErrorCode.CARD_INACTIVE, status.HTTP_404_NOT_FOUND)
 
             item_price = item.price
             if getattr(settings, 'MENU_ENFORCED', False):
@@ -110,13 +115,13 @@ class ScanRFIDCardView(APIView):
 
             if BlockedItem.objects.filter(student=student_or_staff, item=item).exists():
                 return Response(
-                    {'code': 'ITEM_BLOCKED', 'detail': 'This item is blocked by the student\'s parent.'},
+                    error_response(ErrorCode.ITEM_BLOCKED, status.HTTP_403_FORBIDDEN).data,
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
             # Check if student already purchase the item on same session
             if ScannedData.objects.filter(session=session, student_or_staff=student_or_staff, rfid_card=rfid_card, item=item).exists():
-                return Response({'code': 119, "message": "Already purchase this item"}, status=status.HTTP_400_BAD_REQUEST)
+                return error_response(ErrorCode.DUPLICATE_ITEM_IN_SESSION, status.HTTP_400_BAD_REQUEST)
 
             preorder = PreOrder.objects.select_for_update().filter(
                 student=student_or_staff, date=timezone.localdate(),
@@ -177,7 +182,10 @@ class ScanRFIDCardView(APIView):
                         if preorder.status == 'fulfilled':
                             from ..services.preorders import notify_preorder
                             notify_preorder(preorder, 'fulfilled', f'The pre-order for {preorder.date} was fully served.')
-                        return Response(ScannedDataSerializer(scanned_data).data, status=status.HTTP_201_CREATED)
+                        return Response(
+                            ScannedDataSerializer(scanned_data, context={'scan_status': 'success'}).data,
+                            status=status.HTTP_201_CREATED,
+                        )
 
             spending_rule = SpendingRule.objects.filter(student=student_or_staff).first()
             if spending_rule and spending_rule.daily_limit is not None:
@@ -189,7 +197,7 @@ class ScanRFIDCardView(APIView):
                 ).aggregate(total=Sum('charged_amount'))['total'] or Decimal('0.00')
                 if spent_today + item_price > spending_rule.daily_limit:
                     return Response(
-                        {'code': 'DAILY_LIMIT', 'detail': 'This purchase would exceed the student\'s daily spending limit.'},
+                        error_response(ErrorCode.DAILY_LIMIT, status.HTTP_403_FORBIDDEN).data,
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
@@ -201,7 +209,7 @@ class ScanRFIDCardView(APIView):
                 else: 
                     title = f"Your Card Blocked"
                     message = f"Your card is blocked after {settings.STRIKE_LIMIT} insufficient-balance penalties. Please recharge your account to unblock it."
-                return Response({'code': 118, 'message': 'Meal denied. Customer exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
+                return error_response(ErrorCode.CARD_BLOCKED_STRIKES, status.HTTP_403_FORBIDDEN)
 
             from ..services.features import is_enabled
             from ..services.stock import consume_stock
@@ -367,7 +375,7 @@ class ScanRFIDCardView(APIView):
             maybe_alert_low_balance(rfid_card, student_or_staff)
 
             # Return response
-            serializer = ScannedDataSerializer(scanned_data)
+            serializer = ScannedDataSerializer(scanned_data, context={'scan_status': trans_status})
             serializer_data = dict(serializer.data)
             serializer_data['payment_breakdown'] = [
                 {'source': 'fund', 'fund_id': fund.pk, 'fund_name': fund.name, 'amount': str(share)}
@@ -393,7 +401,7 @@ class ActiveSessionView(APIView):
             serializer = ScanSessionSerializer(active_session)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
-            return Response({'code': 114, "message": "No active session available."}, status=status.HTTP_404_NOT_FOUND)
+                return error_response(ErrorCode.SESSION_NOT_ACTIVE, status.HTTP_404_NOT_FOUND)
         
 
 # ---- API FOR START SESSION ----
@@ -438,7 +446,10 @@ class EndScanSessionView(APIView):
             try:
                 session = ScanSession.objects.get(id=session_id, operator=user, status='active')
             except ScanSession.DoesNotExist:
-                return Response({'code': 114, 'message': 'Active session not found'}, status=status.HTTP_404_NOT_FOUND)
+                # Distinguish an existing active session owned by someone else.
+                if ScanSession.objects.filter(id=session_id, status='active').exists():
+                    return error_response(ErrorCode.NOT_SESSION_OPERATOR, status.HTTP_403_FORBIDDEN)
+                return error_response(ErrorCode.SESSION_NOT_ACTIVE, status.HTTP_404_NOT_FOUND)
 
             # ---- RECONCILIATION: compute scanned value, ask operator for expected cash ----
             from decimal import Decimal

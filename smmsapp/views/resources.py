@@ -18,6 +18,7 @@ from ..models import *
 from ..permissions.roles import IsAdminParentOrStaff, IsAdminOnly
 from ..permissions.features import FeatureEnabled
 from ..services.cards import create_card_with_control_number, generate_control_number
+from ..errors import ErrorCode, error_response
 
 # ----- API FOR GET SCHOOL -----
 @extend_schema(tags=['resources'], request=SearchRequestSerializer, responses=SchoolSerializer(many=True))
@@ -786,10 +787,7 @@ class ReplaceCardView(APIView):
 
                 # Idempotency guard: old card must still be active to replace it.
                 if not old_card.is_active:
-                    return Response(
-                        {"code": 400, "message": "This card is already inactive; it has been replaced or deactivated."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                    return error_response(ErrorCode.CARD_INACTIVE, status.HTTP_400_BAD_REQUEST)
 
                 uid_hex = None
                 if card_uid_value:
@@ -805,10 +803,7 @@ class ReplaceCardView(APIView):
 
                 # New card number must be unique across all cards.
                 if RFIDCard.objects.filter(card_number=new_card_number).exists():
-                    return Response(
-                        {"code": 105, "message": "This card number already exists"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                    return error_response(ErrorCode.DUPLICATE_CARD_NUMBER, status.HTTP_400_BAD_REQUEST)
 
                 student_or_staff = old_card.student_or_staff
 
