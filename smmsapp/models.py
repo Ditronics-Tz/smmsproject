@@ -101,6 +101,15 @@ class CustomUser(AbstractUser):
         blank=True,
         help_text='Per-parent default balance threshold that triggers a low-balance reminder for their children. Null falls back to the system default.',
     )
+    external_id = models.CharField(max_length=120, null=True, blank=True)
+    source_system = models.CharField(max_length=80, null=True, blank=True)
+
+    class Meta(AbstractUser.Meta):
+        constraints = [models.UniqueConstraint(
+            fields=['source_system', 'external_id'],
+            condition=Q(source_system__isnull=False, external_id__isnull=False),
+            name='uniq_user_source_external_id',
+        )]
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.role}"
@@ -741,6 +750,63 @@ class Reversal(models.Model):
         return f"Reversal {self.transaction.id} by {self.reversed_by.username if self.reversed_by else '?'} at {self.reversed_at}"
 
 
+class IntegrationKey(models.Model):
+    name = models.CharField(max_length=120)
+    key_hash = models.CharField(max_length=64, unique=True)
+    prefix = models.CharField(max_length=16, unique=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='integration_keys')
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None
+
+
+class IntegrationClass(models.Model):
+    school = models.ForeignKey(School, on_delete=models.PROTECT, related_name='integration_classes')
+    source_system = models.CharField(max_length=80)
+    external_id = models.CharField(max_length=120)
+    name = models.CharField(max_length=160)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['school', 'source_system', 'external_id'], name='uniq_integration_class_external')]
+
+
+class IntegrationSyncLog(models.Model):
+    key = models.ForeignKey(IntegrationKey, on_delete=models.SET_NULL, null=True, blank=True, related_name='sync_logs')
+    endpoint = models.CharField(max_length=32)
+    dry_run = models.BooleanField(default=False)
+    created_count = models.PositiveIntegerField(default=0)
+    updated_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    results = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+
+class WebhookEndpoint(models.Model):
+    school = models.ForeignKey(School, on_delete=models.PROTECT, related_name='webhook_endpoints')
+    url = models.URLField(max_length=1000)
+    secret = models.CharField(max_length=128)
+    events = models.JSONField(default=list)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class WebhookDelivery(models.Model):
+    endpoint = models.ForeignKey(WebhookEndpoint, on_delete=models.CASCADE, related_name='deliveries')
+    event = models.CharField(max_length=80)
+    payload = models.JSONField(default=dict)
+    status_code = models.PositiveSmallIntegerField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+
 # ------ AUDIT LOG TABLE ------
 class AuditLog(models.Model):
     ACTION_CHOICES = [
@@ -753,6 +819,7 @@ class AuditLog(models.Model):
         ('reverse', 'Reverse'),
         ('replace', 'Replace'),
         ('login', 'Login'),
+        ('integration_sync', 'Integration Sync'),
     ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)

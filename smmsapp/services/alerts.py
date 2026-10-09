@@ -68,6 +68,12 @@ def maybe_alert_low_balance(rfid_card, student):
             pass
         created += 1
 
+    if created:
+        from .webhooks import dispatch_webhook_event
+        dispatch_webhook_event(student.school_id, 'balance.low', {
+            'student_id': str(student.id), 'card_id': str(rfid_card.id),
+            'balance': str(rfid_card.balance),
+        })
     return created
 
 

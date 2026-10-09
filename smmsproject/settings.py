@@ -153,7 +153,20 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.audit_purge",
         "schedule": crontab(hour=2, minute=0),  # Daily 02:00
     },
+    "sync-school-system": {
+        "task": "smmsapp.tasks.sync_school_system",
+        "schedule": crontab(hour=int(os.getenv("SCHOOL_SYSTEM_SYNC_HOUR", "3")),
+                             minute=int(os.getenv("SCHOOL_SYSTEM_SYNC_MINUTE", "0"))),
+    },
 }
+
+SCHOOL_SYSTEM_ADAPTER = os.getenv("SCHOOL_SYSTEM_ADAPTER", "csv")
+SCHOOL_SYSTEM_SOURCE = os.getenv("SCHOOL_SYSTEM_SOURCE", "school-system")
+SCHOOL_SYSTEM_INTEGRATION_KEY_ID = os.getenv("SCHOOL_SYSTEM_INTEGRATION_KEY_ID", "")
+SCHOOL_SYSTEM_SYNC_DRY_RUN = os.getenv("SCHOOL_SYSTEM_SYNC_DRY_RUN", "false").lower() == "true"
+SCHOOL_SYSTEM_STUDENTS_CSV = os.getenv("SCHOOL_SYSTEM_STUDENTS_CSV", "")
+SCHOOL_SYSTEM_PARENTS_CSV = os.getenv("SCHOOL_SYSTEM_PARENTS_CSV", "")
+SCHOOL_SYSTEM_CLASSES_CSV = os.getenv("SCHOOL_SYSTEM_CLASSES_CSV", "")
 
 # Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
 DEFAULT_BALANCE_THRESHOLD = '1000.00'
@@ -295,6 +308,7 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
+        'integration': os.getenv('INTEGRATION_RATE', '120/min'),
         'anon': '60/min',             # global anonymous ceiling
         'login': '5/min',             # brute-force / credential-enumeration guard
         'forget_password': '3/min',   # account-enumeration guard

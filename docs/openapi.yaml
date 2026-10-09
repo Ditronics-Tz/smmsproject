@@ -149,6 +149,7 @@ paths:
           - create
           - deactivate
           - delete
+          - integration_sync
           - login
           - replace
           - reverse
@@ -163,6 +164,7 @@ paths:
           * `reverse` - Reverse
           * `replace` - Replace
           * `login` - Login
+          * `integration_sync` - Integration Sync
       - in: query
         name: actor
         schema:
@@ -3598,6 +3600,7 @@ paths:
           - create
           - deactivate
           - delete
+          - integration_sync
           - login
           - replace
           - reverse
@@ -3612,6 +3615,7 @@ paths:
           * `reverse` - Reverse
           * `replace` - Replace
           * `login` - Login
+          * `integration_sync` - Integration Sync
       - in: query
         name: actor
         schema:
@@ -4584,6 +4588,284 @@ paths:
               schema:
                 $ref: '#/components/schemas/ImportUpload'
           description: ''
+  /integrations/v1/admin/keys:
+    get:
+      operationId: integrations_v1_admin_keys_list
+      tags:
+      - integrations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IntegrationKey'
+          description: ''
+    post:
+      operationId: integrations_v1_admin_keys_create
+      tags:
+      - integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationKeyCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IntegrationKeyCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IntegrationKeyCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationKey'
+          description: ''
+        '400':
+          description: No response body
+  /integrations/v1/admin/keys/{key_id}/revoke:
+    post:
+      operationId: integrations_v1_admin_keys_revoke_create
+      parameters:
+      - in: path
+        name: key_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - integrations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationKeyRevoke'
+          description: ''
+  /integrations/v1/admin/keys/{key_id}/rotate:
+    post:
+      operationId: integrations_v1_admin_keys_rotate_create
+      parameters:
+      - in: path
+        name: key_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - integrations
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationKey'
+          description: ''
+        '400':
+          description: No response body
+  /integrations/v1/admin/sync-log:
+    get:
+      operationId: integrations_v1_admin_sync_log_list
+      tags:
+      - integrations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IntegrationSyncLog'
+          description: ''
+  /integrations/v1/admin/webhook-deliveries:
+    get:
+      operationId: integrations_v1_admin_webhook_deliveries_list
+      tags:
+      - integrations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookDelivery'
+          description: ''
+  /integrations/v1/admin/webhooks:
+    get:
+      operationId: integrations_v1_admin_webhooks_list
+      tags:
+      - integrations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+          description: ''
+    post:
+      operationId: integrations_v1_admin_webhooks_create
+      tags:
+      - integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WebhookCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WebhookCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+          description: ''
+        '400':
+          description: No response body
+  /integrations/v1/admin/webhooks/{endpoint_id}:
+    patch:
+      operationId: integrations_v1_admin_webhooks_partial_update
+      parameters:
+      - in: path
+        name: endpoint_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedWebhookUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedWebhookUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedWebhookUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+          description: ''
+        '400':
+          description: No response body
+  /integrations/v1/classes/sync:
+    post:
+      operationId: integrations_v1_classes_sync_create
+      tags:
+      - integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+        required: true
+      security:
+      - IntegrationApiKey: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationSyncResponse'
+          description: ''
+        '400':
+          description: No response body
+  /integrations/v1/parents/sync:
+    post:
+      operationId: integrations_v1_parents_sync_create
+      tags:
+      - integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+        required: true
+      security:
+      - IntegrationApiKey: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationSyncResponse'
+          description: ''
+        '400':
+          description: No response body
+  /integrations/v1/students/sync:
+    post:
+      operationId: integrations_v1_students_sync_create
+      tags:
+      - integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IntegrationSyncRequestRequest'
+        required: true
+      security:
+      - IntegrationApiKey: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationSyncResponse'
+          description: ''
+        '400':
+          description: No response body
   /list/canteen-items:
     get:
       operationId: list_canteen_items_list
@@ -6306,6 +6588,7 @@ components:
       - reverse
       - replace
       - login
+      - integration_sync
       type: string
       description: |-
         * `create` - Create
@@ -6317,6 +6600,7 @@ components:
         * `reverse` - Reverse
         * `replace` - Replace
         * `login` - Login
+        * `integration_sync` - Integration Sync
     BalanceThreshold:
       type: object
       description: Read/write a parent's low-balance threshold. A null value resets
@@ -6952,6 +7236,18 @@ components:
           type: string
       required:
       - error
+    EventsEnum:
+      enum:
+      - meal.purchased
+      - deposit.processed
+      - balance.low
+      - card.replaced
+      type: string
+      description: |-
+        * `meal.purchased` - meal.purchased
+        * `deposit.processed` - deposit.processed
+        * `balance.low` - balance.low
+        * `card.replaced` - card.replaced
     ExportAccepted:
       type: object
       description: Returned when an export is queued rather than generated inline.
@@ -7476,6 +7772,147 @@ components:
           allOf:
           - $ref: '#/components/schemas/ModeEnum'
           default: best_effort
+    IntegrationKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        prefix:
+          type: string
+        api_key:
+          type: string
+          readOnly: true
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - api_key
+      - id
+      - prefix
+    IntegrationKeyCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+      - name
+    IntegrationKeyRevoke:
+      type: object
+      properties:
+        id:
+          type: string
+        revoked_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - revoked_at
+    IntegrationSyncLog:
+      type: object
+      properties:
+        id:
+          type: string
+        endpoint:
+          type: string
+        dry_run:
+          type: boolean
+        created:
+          type: integer
+        updated:
+          type: integer
+        failed:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - created
+      - created_at
+      - dry_run
+      - endpoint
+      - failed
+      - id
+      - results
+      - updated
+    IntegrationSyncRequestRequest:
+      type: object
+      properties:
+        source_system:
+          type: string
+          minLength: 1
+          maxLength: 80
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          maxItems: 500
+        dry_run:
+          type: boolean
+          default: false
+      required:
+      - rows
+      - source_system
+    IntegrationSyncResponse:
+      type: object
+      properties:
+        created:
+          type: integer
+        updated:
+          type: integer
+        failed:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrationSyncRowResult'
+      required:
+      - created
+      - failed
+      - results
+      - updated
+    IntegrationSyncRowResult:
+      type: object
+      properties:
+        index:
+          type: integer
+        external_id:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/IntegrationSyncRowResultStatusEnum'
+        error:
+          type: string
+      required:
+      - index
+      - status
+    IntegrationSyncRowResultStatusEnum:
+      enum:
+      - created
+      - updated
+      - failed
+      type: string
+      description: |-
+        * `created` - created
+        * `updated` - updated
+        * `failed` - failed
     ItemIdRequestRequest:
       type: object
       properties:
@@ -8235,6 +8672,20 @@ components:
           type: boolean
           writeOnly: true
           default: false
+    PatchedWebhookUpdateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          minLength: 1
+        events:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        is_active:
+          type: boolean
     PeriodEnum:
       enum:
       - week
@@ -9500,6 +9951,73 @@ components:
           default: ''
         role:
           type: string
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - events
+      - id
+      - url
+    WebhookCreateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          minLength: 1
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventsEnum'
+      required:
+      - events
+      - url
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+        endpoint_id:
+          type: string
+        event:
+          type: string
+        status_code:
+          type: integer
+          nullable: true
+        attempts:
+          type: integer
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - attempts
+      - created_at
+      - delivered_at
+      - endpoint_id
+      - event
+      - id
+      - last_error
+      - status_code
     WeeklySales:
       type: object
       properties:
@@ -9514,6 +10032,10 @@ components:
       - date
       - sales_amount
   securitySchemes:
+    IntegrationApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
     jwtAuth:
       type: http
       scheme: bearer

@@ -167,6 +167,12 @@ class ScanRFIDCardView(APIView):
                         )
                         scanned_data._preorder_fulfilled = True
                         scanned_data._payment_breakdown = [{'source': 'preorder', 'amount': str(fulfilled.unit_price)}]
+                        from ..services.webhooks import dispatch_webhook_event
+                        transaction.on_commit(lambda: dispatch_webhook_event(
+                            student_or_staff.school_id, 'meal.purchased',
+                            {'transaction_id': str(transaction_record.id), 'card_id': str(rfid_card.id),
+                             'item_id': item.id, 'amount': str(fulfilled.unit_price)},
+                        ))
                         preorder.refresh_from_db(fields=['status'])
                         if preorder.status == 'fulfilled':
                             from ..services.preorders import notify_preorder
@@ -329,6 +335,13 @@ class ScanRFIDCardView(APIView):
                 scan_source=scan_source,
                 client_scan_id=client_scan_id,
             )
+            if trans_status == 'successful':
+                from ..services.webhooks import dispatch_webhook_event
+                transaction.on_commit(lambda: dispatch_webhook_event(
+                    student_or_staff.school_id, 'meal.purchased',
+                    {'transaction_id': str(transaction_record.id), 'card_id': str(rfid_card.id),
+                     'item_id': item.id, 'amount': str(charged_amount)},
+                ))
 
             # Notify parent (email/push via Notification + SMS for feature phones)
             parents = ParentStudent.objects.filter(student=student_or_staff)

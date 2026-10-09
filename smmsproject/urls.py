@@ -43,6 +43,7 @@ urlpatterns = [
     path('sms/', include("smmsapp.urls.sms")),
     # Versioned API
     path('api/v1/', include('smmsapp.urls.v1')),
+    path('integrations/', include('smmsapp.urls.integrations')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Spectacular schema/docs (staff-only) - added conditionally if installed

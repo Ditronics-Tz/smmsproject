@@ -863,6 +863,12 @@ class ReplaceCardView(APIView):
                     replaced_by=request.user,
                     reason=reason,
                 )
+                from ..services.webhooks import dispatch_webhook_event
+                transaction.on_commit(lambda: dispatch_webhook_event(
+                    student_or_staff.school_id, 'card.replaced',
+                    {'old_card_id': str(old_card.id), 'new_card_id': str(new_card.id),
+                     'owner_id': str(student_or_staff.id)},
+                ))
 
                 # Notify the owner's parents (student) or the owner (staff).
                 parents = ParentStudent.objects.filter(student=student_or_staff, student__role='student')

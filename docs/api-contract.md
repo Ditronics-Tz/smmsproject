@@ -62,7 +62,7 @@ Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the databas
 - `PARENT_LIMITS`: parent balance-threshold API and its scheduled low-balance sweep.
 - `NFC_SCAN`: scan requests that supply `card_uid`. Existing USB/RFID requests using `card_number` remain available regardless of this flag. NFC UIDs are normalized to uppercase hexadecimal and matched against `RFIDCard.uid_hex`.
 
-`PREORDER` gates the preorder API and its scan fulfilment path. `STOCK` gates stock-management endpoints and the scheduled stock-alert task. Sponsorship and integration flags are available to clients/configuration and included in profiles, but those modules do not yet have corresponding routes. `build_insights` skips work while `INSIGHTS` is disabled. `build_daily_stats` runs regardless of `ANALYTICS` so reporting snapshots remain current; it is core aggregation work, not a feature API. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
+`PREORDER` gates the preorder API and its scan fulfilment path. `STOCK` gates stock-management endpoints and the scheduled stock-alert task. `INTEGRATIONS` gates school-system sync and webhook management. `build_insights` skips work while `INSIGHTS` is disabled. `build_daily_stats` runs regardless of `ANALYTICS` so reporting snapshots remain current; it is core aggregation work, not a feature API. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
 
 ## Parent spending controls (BE-90)
 
@@ -113,3 +113,14 @@ If a card is replaced between ordering and the meal, the placed order follows th
 ## Customer feature profiles
 
 When provisioning a customer deployment, set its `FEATURES_DEFAULT` environment JSON, run migrations, then apply a starting profile with `python manage.py apply_feature_profile basic|standard|full`. Profiles live in `docs/feature-profiles.json`; applying one sets every supported flag, overriding the environment defaults in the database. Use `basic` for menu and deposit operations, `standard` for analytics/ledger/parent limits, and `full` to enable all listed modules. Review the profile against the customer's plan before applying it; individual overrides can subsequently be changed with `python manage.py set_feature KEY --on` or `--off`. Use `python manage.py list_features` to review effective values and defaults.
+
+## School-system integration API
+
+Integration paths are `/integrations/v1/students/sync`,
+`/integrations/v1/parents/sync`, and `/integrations/v1/classes/sync` (versioned
+separately from `/api/v1`). Authenticate with an admin-issued `X-API-Key` or
+`Authorization: Api-Key` credential. Request body:
+`{ "source_system": "...", "rows": [...], "dry_run": false }`; batches are
+limited to 500 rows. Responses contain `created`, `updated`, `failed`, and
+row-level `results`. Admin key, webhook, delivery-log, and sync-log management
+endpoints are under `/integrations/v1/admin/`.

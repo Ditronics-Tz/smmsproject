@@ -6,6 +6,7 @@ class smmsappConfig(AppConfig):
     name = 'smmsapp'
 
     def ready(self):
+        from .integrations import schema  # noqa: F401
         from django.db.models.signals import post_delete, post_save
         from .models import FeatureFlag
         from .services.features import clear_feature_cache

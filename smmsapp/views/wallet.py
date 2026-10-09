@@ -218,6 +218,13 @@ class ProcessDepositView(APIView):
                     status='sent',
                 )
 
+            from ..services.webhooks import dispatch_webhook_event
+            transaction.on_commit(lambda: dispatch_webhook_event(
+                rfid_card.student_or_staff.school_id, 'deposit.processed',
+                {'deposit_id': str(deposit.id), 'card_id': str(rfid_card.id), 'amount': str(deposit.amount),
+                 'payment_method': deposit.payment_method, 'reference': deposit.reference},
+            ))
+
             return Response({
                 'code': 200,
                 'message': 'Deposit processed successfully',

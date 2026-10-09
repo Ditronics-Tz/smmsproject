@@ -1,5 +1,7 @@
 import os
 import logging
+import json
+import requests
 from celery import shared_task
 from django.core.mail import send_mail, EmailMultiAlternatives
 from django.conf import settings
@@ -49,6 +51,80 @@ def build_daily_stats(day_iso=None):
 
     day = date.fromisoformat(day_iso) if day_iso else timezone.localdate() - timedelta(days=1)
     return build_daily_stats_for_day(day)
+
+
+@shared_task(bind=True, max_retries=4, default_retry_delay=30)
+def deliver_webhook(self, delivery_id):
+    """Post a signed webhook; Celery retries failures up to five total tries."""
+    from django.utils import timezone
+    from .models import WebhookDelivery
+    from .services.webhooks import _assert_public_https_target, webhook_signature
+    from .services.features import is_enabled
+
+    if not is_enabled("INTEGRATIONS"):
+        return "feature_disabled"
+
+    delivery = WebhookDelivery.objects.select_related("endpoint").get(pk=delivery_id)
+    if delivery.delivered_at:
+        return "already_delivered"
+    body = json.dumps({"event": delivery.event, "data": delivery.payload}, separators=(",", ":")).encode("utf-8")
+    signature = webhook_signature(delivery.endpoint.secret, body)
+    delivery.attempts += 1
+    try:
+        _assert_public_https_target(delivery.endpoint.url)
+        response = requests.post(
+            delivery.endpoint.url, data=body, headers={
+                "Content-Type": "application/json", "X-SMMS-Signature": signature,
+                "X-SMMS-Event": delivery.event,
+            }, timeout=(5, 15), allow_redirects=False,
+        )
+        delivery.status_code = response.status_code
+        if 200 <= response.status_code < 300:
+            delivery.delivered_at = timezone.now()
+            delivery.last_error = ""
+            delivery.save(update_fields=["attempts", "status_code", "delivered_at", "last_error"])
+            return "delivered"
+        delivery.last_error = f"HTTP {response.status_code}"
+        delivery.save(update_fields=["attempts", "status_code", "last_error"])
+        raise RuntimeError(f"Webhook returned HTTP {response.status_code}")
+    except (requests.RequestException, RuntimeError, ValueError) as exc:
+        delivery.last_error = type(exc).__name__
+        delivery.save(update_fields=["attempts", "status_code", "last_error"])
+        if self.request.retries >= self.max_retries:
+            return "failed"
+        raise self.retry(exc=exc)
+
+
+@shared_task
+def sync_school_system():
+    """Scheduled CSV/adapter import through the same idempotent sync service."""
+    from django.conf import settings
+    from .integrations.adapters.loader import load_school_adapter
+    from .models import IntegrationKey
+    from .services.integrations import sync_batch
+    from .services.features import is_enabled
+
+    if not is_enabled("INTEGRATIONS"):
+        return {"configured": False, "reason": "INTEGRATIONS feature is disabled"}
+
+    key_id = settings.SCHOOL_SYSTEM_INTEGRATION_KEY_ID
+    if not key_id:
+        return {"configured": False, "reason": "SCHOOL_SYSTEM_INTEGRATION_KEY_ID is unset"}
+    key = IntegrationKey.objects.select_related("created_by", "created_by__school").filter(
+        pk=key_id, revoked_at__isnull=True, created_by__is_active=True,
+    ).first()
+    if key is None or key.created_by.school_id is None:
+        return {"configured": False, "reason": "Configured integration key is unavailable"}
+
+    adapter = load_school_adapter()
+    totals = {}
+    for kind in ("students", "parents", "classes"):
+        rows = getattr(adapter, f"fetch_{kind}")()
+        totals[kind] = sync_batch(
+            kind, rows, key.created_by.school, settings.SCHOOL_SYSTEM_SOURCE,
+            settings.SCHOOL_SYSTEM_SYNC_DRY_RUN, key,
+        )
+    return {"configured": True, "results": totals}
 
 
 @shared_task
