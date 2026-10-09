@@ -5,7 +5,7 @@
 # Docker containers for both development and production environments
 # ============================================================================
 
-.PHONY: help build build-dev build-prod up up-dev up-prod down logs shell migrate makemigrations collectstatic createsuperuser test clean prune schema
+.PHONY: help build build-dev build-prod up up-dev up-prod down logs shell migrate makemigrations collectstatic createsuperuser test clean prune schema load-seed load-benchmark security-audit
 
 # Colors for output
 GREEN := \033[0;32m
@@ -101,6 +101,15 @@ test: ## Run tests
 
 schema: ## Regenerate the committed OpenAPI schema
 	python manage.py spectacular --file docs/openapi.yaml
+
+load-seed: ## Seed a disposable DEBUG database with synthetic scale data
+	docker-compose exec web python manage.py seed_load_data
+
+load-benchmark: ## Benchmark analytics, ledger, and insights endpoints
+	docker-compose exec web python manage.py benchmark_load_endpoints
+
+security-audit: ## Audit pinned Python dependencies
+	pip-audit -r requirements.txt --no-deps
 
 check: ## Run Django system checks
 	docker-compose exec web python manage.py check
