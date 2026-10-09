@@ -1,7 +1,8 @@
 from decimal import Decimal
+from datetime import date
 
 from django.conf import settings
-from django.utils.timezone import now
+from django.utils import timezone
 
 from ..models import Notification, ParentStudent, RFIDCard
 
@@ -13,19 +14,16 @@ def _effective_threshold(parent):
     return Decimal(str(getattr(settings, 'DEFAULT_BALANCE_THRESHOLD', '1000.00')))
 
 
-def _student_marker(student):
-    """Stable, unique marker embedded in the reminder message so we can dedupe a
-    once-per-day low-balance reminder per parent+student without extra schema."""
-    return f"[student:{student.id}]"
+def _low_balance_dedupe_key(student, alert_date: date | None = None):
+    alert_date = alert_date or timezone.localdate()
+    return f'low_balance:{student.id}:{alert_date.isoformat()}'
 
 
 def has_low_balance_alert_today(parent, student):
     """True if a low-balance reminder was already queued today for this parent+student."""
     return Notification.objects.filter(
         recipient=parent,
-        type='reminder',
-        created_at__date=now().date(),
-        message__contains=_student_marker(student),
+        dedupe_key=_low_balance_dedupe_key(student),
     ).exists()
 
 
@@ -45,20 +43,22 @@ def maybe_alert_low_balance(rfid_card, student):
         threshold = _effective_threshold(parent)
         if rfid_card.balance >= threshold:
             continue
-        if has_low_balance_alert_today(parent, student):
-            continue
-        notif = Notification.objects.create(
-            recipient=parent,
-            title='Low Balance Reminder',
-            message=(
-                f"{_student_marker(student)} "
-                f"Your child {student.first_name} {student.last_name}'s balance is "
-                f"{rfid_card.balance}, below the minimum threshold of {threshold}. "
-                f"Please top up to avoid penalties."
-            ),
-            status='pending',
-            type='reminder',
+        dedupe_key = _low_balance_dedupe_key(student)
+        notif, was_created = Notification.objects.get_or_create(
+            recipient=parent, dedupe_key=dedupe_key,
+            defaults={
+                'title': 'Low Balance Reminder',
+                'message': (
+                    f"Your child {student.first_name} {student.last_name}'s balance is "
+                    f"{rfid_card.balance}, below the minimum threshold of {threshold}. "
+                    f"Please top up to avoid penalties."
+                ),
+                'status': 'pending',
+                'type': 'reminder',
+            },
         )
+        if not was_created:
+            continue
         # SMS first for feature-phone parents (Tanzania): abstracted provider, cost-controlled, logged
         try:
             from .sms import send_critical_sms

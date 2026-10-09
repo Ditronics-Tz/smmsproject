@@ -1,7 +1,10 @@
 from decimal import Decimal
+from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from ..models import (
@@ -117,9 +120,45 @@ class ScanHookTests(AlertBase):
             maybe_alert_low_balance(self.card, self.student), 0,
         )
         self.assertEqual(Notification.objects.filter(type="reminder").count(), 1)
+        notice = Notification.objects.get(type="reminder")
+        self.assertEqual(notice.dedupe_key, f"low_balance:{self.student.id}:{timezone.localdate().isoformat()}")
+        self.assertNotIn("[student:", notice.message)
+
+    def test_a_new_local_day_gets_a_new_dedupe_key(self):
+        self.parent.balance_threshold = Decimal("4000.00")
+        self.parent.save(update_fields=["balance_threshold"])
+        self.card.balance = Decimal("1000.00")
+        self.card.save(update_fields=["balance"])
+
+        with patch("smmsapp.services.alerts.timezone.localdate", return_value=date(2026, 6, 1)):
+            self.assertEqual(maybe_alert_low_balance(self.card, self.student), 1)
+        with patch("smmsapp.services.alerts.timezone.localdate", return_value=date(2026, 6, 2)):
+            self.assertEqual(maybe_alert_low_balance(self.card, self.student), 1)
+
+        self.assertEqual(Notification.objects.filter(type="reminder").count(), 2)
+        self.assertEqual(
+            set(Notification.objects.filter(type="reminder").values_list("dedupe_key", flat=True)),
+            {
+                f"low_balance:{self.student.id}:2026-06-01",
+                f"low_balance:{self.student.id}:2026-06-02",
+            },
+        )
 
 
 class SweepTests(AlertBase):
+    def test_two_sweeps_same_day_create_one_parent_child_alert(self):
+        self.parent.balance_threshold = Decimal("2000.00")
+        self.parent.save(update_fields=["balance_threshold"])
+        self.card.balance = Decimal("500.00")
+        self.card.save(update_fields=["balance"])
+
+        first = sweep_low_balances()
+        second = sweep_low_balances()
+
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertEqual(Notification.objects.filter(type="reminder").count(), 1)
+
     def test_sweep_raises_reminders_for_low_cards(self):
         self.parent.balance_threshold = Decimal("2000.00")
         self.parent.save(update_fields=["balance_threshold"])
