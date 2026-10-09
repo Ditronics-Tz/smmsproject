@@ -12,3 +12,13 @@ class BalanceThresholdSerializer(serializers.Serializer):
     effective_threshold = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True,
     )
+
+
+class ParentControlsSerializer(serializers.Serializer):
+    child_id = serializers.UUIDField()
+    daily_limit = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True, min_value=Decimal('0'),
+    )
+    blocked_item_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False,
+    )

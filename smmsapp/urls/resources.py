@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from ..views.resources import *
+from ..views.alerts import ParentControlsView
 
 urlpatterns = [
     # User Urls
@@ -36,5 +37,6 @@ urlpatterns = [
 
     # notifications
     path('notifications/', NotificationListView.as_view(), name='notifications'),
-    path('all-notifications/', AllNotificationsView.as_view(), name='all-notifications')
+    path('all-notifications/', AllNotificationsView.as_view(), name='all-notifications'),
+    path('parent-controls', ParentControlsView.as_view(), name='parent-controls'),
 ]

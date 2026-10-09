@@ -198,6 +198,26 @@ class ParentStudent(models.Model):
     def __str__(self):
         return f"Parent: {self.parent.username} - Student: {self.student.username}"
 
+
+class SpendingRule(models.Model):
+    """Optional per-student daily wallet spend cap configured by a parent."""
+    student = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, related_name='spending_rule',
+        limit_choices_to={'role': 'student'},
+    )
+    daily_limit = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class BlockedItem(models.Model):
+    """A canteen item that a student's linked parent has blocked."""
+    student = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='blocked_items')
+    item = models.ForeignKey('CanteenItem', on_delete=models.PROTECT, related_name='blocked_for_students')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['student', 'item'], name='uniq_blocked_item_per_student')]
+
 # ------ CANTEEN ITEM TABLE ---------
 class CanteenItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -23,6 +23,10 @@ Error responses use a `code` (numeric for legacy codes, string for named contrac
 | `DAILY_MENU_EXISTS` | A menu already exists for the requested date and meal type. | 409 |
 | `DAILY_MENU_NOT_FOUND` | No menu exists for the requested date and meal type. | 404 |
 | `ITEM_NOT_ON_MENU` | The scanned item is not on today's menu for this meal. | 403 |
+| `ITEM_BLOCKED` | The student's parent has blocked the scanned canteen item. | 403 |
+| `DAILY_LIMIT` | The purchase would exceed the student's configured daily spending limit. | 403 |
+| `CHILD_NOT_LINKED` | The requested child is not linked to the authenticated parent. | 403 |
+| `PARENT_REQUIRED` | Only a parent can manage child spending controls. | 403 |
 | `MENU_ITEM_HAS_PREORDERS` | A menu item cannot be removed while active pre-orders reference that menu. | 409 |
 | `PREORDER_CUTOFF_PASSED` | The Tanzania-local ordering cutoff has passed. | 400 |
 | `PREORDER_NO_MENU` | No menu exists for the requested date and meal. | 400 |

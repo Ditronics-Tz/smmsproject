@@ -58,6 +58,12 @@ Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the databas
 
 `PREORDER` gates the preorder API and its scan fulfilment path. Sponsorship, integration, and stock flags are available to clients/configuration and included in profiles, but there are no corresponding routes to gate yet. `build_insights` skips work while `INSIGHTS` is disabled. There is no `build_daily_stats` task in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
 
+## Parent spending controls (BE-90)
+
+Parents manage controls for their linked children through `GET|PUT /api/v1/resources/parent-controls?child_id=<uuid>`. `PUT` accepts `{ child_id, daily_limit, blocked_item_ids }`; `daily_limit` may be `null` to remove the cap, and `blocked_item_ids` replaces the blocked-item list. A parent cannot read or change controls for an unlinked child. When `PARENT_LIMITS` is disabled, this endpoint returns `FEATURE_DISABLED`.
+
+At scan time, an item in the child's blocked list returns HTTP 403 `ITEM_BLOCKED`. A purchase that would take that child's non-voided daily wallet spend above `daily_limit` returns HTTP 403 `DAILY_LIMIT`; spending exactly up to the limit is allowed. Pre-order fulfilment is not counted as new wallet spend because its funds were held when the order was placed.
+
 ## Card UID/NFC scanning
 
 `POST /api/v1/sessions/scan-card` accepts exactly one of `card_number` or `card_uid`. UID scans require `NFC_SCAN`; send `scan_source: "nfc"` (inferred if omitted). USB scans default to `scan_source: "usb"`. Optional `client_scan_id` makes retries idempotent. Scans are rate-limited per operator using `SCAN_THROTTLE_RATE` (default 120/minute). Card UID format and the outstanding physical-card investigation are documented in `docs/card-identifiers.md`.

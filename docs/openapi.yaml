@@ -2032,6 +2032,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/CodeMessage'
           description: ''
+  /api/v1/resources/parent-controls:
+    get:
+      operationId: api_v1_resources_parent_controls_retrieve
+      description: Read and replace a parent's daily cap and blocked-item list for
+        a child.
+      parameters:
+      - in: query
+        name: child_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - parent controls
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParentControls'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+    put:
+      operationId: api_v1_resources_parent_controls_update
+      description: Read and replace a parent's daily cap and blocked-item list for
+        a child.
+      parameters:
+      - in: query
+        name: child_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - parent controls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParentControlsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ParentControlsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ParentControlsRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParentControls'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
   /api/v1/resources/parent-details:
     post:
       operationId: api_v1_resources_parent_details_create
@@ -4373,6 +4454,87 @@ paths:
                 $ref: '#/components/schemas/CodeMessage'
           description: ''
         '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+  /resources/parent-controls:
+    get:
+      operationId: resources_parent_controls_retrieve
+      description: Read and replace a parent's daily cap and blocked-item list for
+        a child.
+      parameters:
+      - in: query
+        name: child_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - parent controls
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParentControls'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+    put:
+      operationId: resources_parent_controls_update
+      description: Read and replace a parent's daily cap and blocked-item list for
+        a child.
+      parameters:
+      - in: query
+        name: child_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - parent controls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParentControlsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ParentControlsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ParentControlsRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParentControls'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeMessage'
+          description: ''
+        '403':
           content:
             application/json:
               schema:
@@ -6928,6 +7090,42 @@ components:
           $ref: '#/components/schemas/GenderEnum'
       required:
       - id
+    ParentControls:
+      type: object
+      properties:
+        child_id:
+          type: string
+          format: uuid
+        daily_limit:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        blocked_item_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - child_id
+    ParentControlsRequest:
+      type: object
+      properties:
+        child_id:
+          type: string
+          format: uuid
+        daily_limit:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        blocked_item_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - child_id
     ParentIdRequestRequest:
       type: object
       properties:

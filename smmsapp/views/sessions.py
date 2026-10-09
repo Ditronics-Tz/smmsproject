@@ -5,7 +5,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Sum
 from django.db.models import Q
 from ..models import *
 from ..serializers.sessions import (
@@ -106,6 +106,12 @@ class ScanRFIDCardView(APIView):
                 if menu_line.price_override is not None:
                     item_price = menu_line.price_override
 
+            if BlockedItem.objects.filter(student=student_or_staff, item=item).exists():
+                return Response(
+                    {'code': 'ITEM_BLOCKED', 'detail': 'This item is blocked by the student\'s parent.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             # Check if student already purchase the item on same session
             if ScannedData.objects.filter(session=session, student_or_staff=student_or_staff, rfid_card=rfid_card, item=item).exists():
                 return Response({'code': 119, "message": "Already purchase this item"}, status=status.HTTP_400_BAD_REQUEST)
@@ -139,6 +145,20 @@ class ScanRFIDCardView(APIView):
                             from ..services.preorders import notify_preorder
                             notify_preorder(preorder, 'fulfilled', f'The pre-order for {preorder.date} was fully served.')
                         return Response(ScannedDataSerializer(scanned_data).data, status=status.HTTP_201_CREATED)
+
+            spending_rule = SpendingRule.objects.filter(student=student_or_staff).first()
+            if spending_rule and spending_rule.daily_limit is not None:
+                spent_today = Transaction.objects.filter(
+                    student_or_staff=student_or_staff,
+                    transaction_date__date=timezone.localdate(),
+                    transaction_status__in=['successful', 'penalty'],
+                    is_voided=False,
+                ).aggregate(total=Sum('charged_amount'))['total'] or Decimal('0.00')
+                if spent_today + item_price > spending_rule.daily_limit:
+                    return Response(
+                        {'code': 'DAILY_LIMIT', 'detail': 'This purchase would exceed the student\'s daily spending limit.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
             # Check if student has exceeded 10 insufficient meals
             if rfid_card.insufficient_meal_count >= settings.STRIKE_LIMIT:
