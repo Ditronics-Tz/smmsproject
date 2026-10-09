@@ -45,6 +45,12 @@ def place_preorder(*, student, card, order_date, meal_type, rows, idempotency_ke
     cutoff = cutoff_for(order_date)
     if timezone.now() >= cutoff:
         raise ValueError('PREORDER_CUTOFF_PASSED')
+    # Locking the student's active card serializes concurrent create requests;
+    # recheck the one-active-order rule after acquiring that lock.
+    if PreOrder.objects.filter(
+        student=student, date=order_date, meal_type=meal_type, status='placed',
+    ).exists():
+        raise ValueError('PREORDER_CONFLICT')
     total = Decimal('0.00')
     prepared = []
     for menu_item, quantity, price in rows:

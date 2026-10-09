@@ -90,6 +90,34 @@ class PreOrderServiceTests(TestCase):
         self.card.refresh_from_db()
         self.assertEqual(self.card.balance, Decimal('0.00'))
 
+    def test_quantity_above_configured_limit_is_rejected(self):
+        with self.assertRaisesMessage(ValueError, 'PREORDER_QUANTITY_LIMIT'):
+            place_preorder(
+                student=self.student, card=self.card, order_date=self.day, meal_type='lunch',
+                rows=[(self.item, 2, Decimal('200.00'))],
+                idempotency_key='too-many-rice', actor=self.parent,
+            )
+
+    def test_second_active_order_for_same_meal_is_rejected(self):
+        self._place(key='first-active-order')
+        with self.assertRaisesMessage(ValueError, 'PREORDER_CONFLICT'):
+            self._place(key='second-active-order')
+
+    def test_cancel_after_cutoff_is_rejected_without_releasing_hold(self):
+        cutoff = cutoff_for(self.day)
+        with patch('smmsapp.services.preorders.timezone.now', return_value=cutoff - timedelta(seconds=1)):
+            order = self._place(key='cancel-boundary-order')
+        api = APIClient()
+        api.force_authenticate(self.parent)
+        with patch('smmsapp.views.preorders.timezone.now', return_value=cutoff + timedelta(seconds=1)):
+            response = api.post('/api/v1/preorders/cancel', {'preorder_id': str(order.id)}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['code'], 'PREORDER_NOT_CANCELLABLE')
+        self.card.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'placed')
+        self.assertEqual(self.card.held_balance, Decimal('200.00'))
+
     def test_cutoff_boundary_one_second_before_and_after(self):
         cutoff = cutoff_for(self.day)
         with patch('smmsapp.services.preorders.timezone.now', return_value=cutoff - timedelta(seconds=1)):
