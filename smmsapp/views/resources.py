@@ -849,8 +849,8 @@ class ReplaceCardView(APIView):
                     old_card.held_balance = 0
 
                 # Record the balance migration on the new card for audit.
-                from ..models import LedgerEntry
-                LedgerEntry.objects.create(
+                from ..services.legacy_ledger import record_legacy_ledger_entry
+                record_legacy_ledger_entry(
                     rfid_card=new_card,
                     event_type='card_replacement',
                     amount=carried_balance,

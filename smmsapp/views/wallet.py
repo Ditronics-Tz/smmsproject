@@ -188,7 +188,8 @@ class ProcessDepositView(APIView):
                 rfid_card.save()
 
                 # Write ledger entry for the deposit
-                LedgerEntry.objects.create(
+                from ..services.legacy_ledger import record_legacy_ledger_entry
+                record_legacy_ledger_entry(
                     rfid_card=rfid_card,
                     event_type='deposit',
                     amount=deposit.amount,
@@ -416,7 +417,8 @@ class ReverseTransactionView(APIView):
             rfid_card.save()
 
             # Write ledger entry for the reversal
-            LedgerEntry.objects.create(
+            from ..services.legacy_ledger import record_legacy_ledger_entry
+            record_legacy_ledger_entry(
                 rfid_card=rfid_card,
                 event_type='reversal',
                 amount=restore_amount,  # positive: restores the actual deduction

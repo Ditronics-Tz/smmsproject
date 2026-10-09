@@ -297,9 +297,9 @@ class ScanRFIDCardView(APIView):
                 stock_movement.save(update_fields=['source_transaction'])
 
             # Write ledger entry for the balance change
-            from ..models import LedgerEntry
+            from ..services.legacy_ledger import record_legacy_ledger_entry
             if trans_status == 'successful':
-                LedgerEntry.objects.create(
+                record_legacy_ledger_entry(
                     rfid_card=rfid_card,
                     event_type='purchase',
                     amount=-charged_amount,  # actual wallet delta
@@ -308,7 +308,7 @@ class ScanRFIDCardView(APIView):
                     ref_transaction=transaction_record,
                 )
             else:  # penalty
-                LedgerEntry.objects.create(
+                record_legacy_ledger_entry(
                     rfid_card=rfid_card,
                     event_type='penalty',
                     amount=-charged_amount,

@@ -181,6 +181,9 @@ RFID_BALANCE_FLOOR = os.getenv('RFID_BALANCE_FLOOR', '-500.00')
 PENALTY_FEE = Decimal(os.getenv('PENALTY_FEE', '500.00'))
 STRIKE_LIMIT = int(os.getenv('STRIKE_LIMIT', '10'))
 STRIKE_RESET_ON_DEPOSIT = os.getenv('STRIKE_RESET_ON_DEPOSIT', 'False') == 'True'
+# Keep legacy ledger dual-writes enabled until frontend statement screens have
+# completed the journal API cutover and the deployment has been observed.
+LEDGER_LEGACY_WRITE = os.getenv('LEDGER_LEGACY_WRITE', 'True').lower() == 'true'
 
 FEATURE_KEYS = (
     'ANALYTICS', 'INSIGHTS', 'LEDGER_UI', 'PAYMENTS', 'MENU', 'PREORDER', 'PREORDERS',

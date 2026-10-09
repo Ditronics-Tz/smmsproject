@@ -228,6 +228,7 @@ values in place unless the deployment needs a different policy.
 | `SPONSOR_FALLBACK_TO_WALLET` | `True` | Allow wallet fallback when sponsorship does not cover an item |
 | `RFID_BALANCE_FLOOR` | `-500.00` | Lowest permitted wallet balance |
 | `PENALTY_FEE`, `STRIKE_LIMIT`, `STRIKE_RESET_ON_DEPOSIT` | `500.00`, `10`, `False` | Strike and insufficient-balance penalty policy |
+| `LEDGER_LEGACY_WRITE` | `True` | Keep dual-writing the old ledger until the frontend statement screens have cut over to journal API |
 | `SCAN_THROTTLE_RATE` | `120` | Maximum scans per operator per minute |
 | `AUDIT_RETENTION_DAYS` | `365` | Audit-log retention period |
 | `SMS_PROVIDER` | `log` | SMS adapter: `log`, `twilio`, or `beem` |
