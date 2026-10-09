@@ -154,6 +154,7 @@ This section documents every environment variable required to deploy the SMMS sy
 | `SECRET_KEY` | *(required)* | Django's secret key — **must be set per deployment** | Generate a new strong value |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated list of allowed hosts | Add your domain(s), e.g. `example.com,www.example.com` |
 | `API_BASE_URL` | `http://127.0.0.1:8000` | Base URL for the API (used in email links, etc.) | Set to your public URL, e.g. `https://app.your-org.com` |
+| `INVITE_TOKEN_TTL_HOURS` | `48` | Password-invite token validity period in hours | Set the desired invite expiry window |
 
 ### Database
 

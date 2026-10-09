@@ -84,6 +84,11 @@ class PasswordNotificationSecurityTests(TestCase):
         self.assertNotIn("Password:", mail.outbox[0].body)
         raw_token = mail.outbox[0].body.split("token=")[-1].split()[0]
         token_row = PasswordResetToken.objects.get(user=user)
+        self.assertAlmostEqual(
+            (token_row.expires_at - timezone.now()).total_seconds(),
+            48 * 60 * 60,
+            delta=5,
+        )
         self.assertNotEqual(token_row.token_hash, raw_token)
         self.assertNotIn(raw_token, str(list(AuditLog.objects.values("before", "after"))))
         self.assertNotIn(raw_token, str(list(Notification.objects.values_list("message", flat=True))))
