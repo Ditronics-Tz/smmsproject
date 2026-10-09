@@ -2640,6 +2640,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/CodeMessage'
           description: ''
+  /api/v1/stock/:
+    get:
+      operationId: api_v1_stock_list
+      tags:
+      - stock
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockLevel'
+          description: ''
+  /api/v1/stock/adjust:
+    post:
+      operationId: api_v1_stock_adjust_create
+      tags:
+      - stock
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAdjustmentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/StockAdjustmentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StockAdjustmentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockLevel'
+          description: ''
   /api/v1/wallet/deposit/create:
     post:
       operationId: api_v1_wallet_deposit_create_create
@@ -8047,6 +8089,53 @@ components:
       required:
       - checks
       - status
+    StockAdjustmentRequest:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        delta:
+          type: integer
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+        low_threshold:
+          type: integer
+          minimum: 0
+      required:
+      - delta
+      - item_id
+      - reason
+    StockLevel:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+        item_name:
+          type: string
+          readOnly: true
+        quantity:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        low_threshold:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - item_id
+      - item_name
+      - updated_at
     Student:
       type: object
       properties:

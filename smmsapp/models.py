@@ -231,6 +231,24 @@ class CanteenItem(models.Model):
         return self.name
 
 
+class StockLevel(models.Model):
+    item = models.OneToOneField(CanteenItem, on_delete=models.PROTECT, related_name='stock_level')
+    quantity = models.PositiveIntegerField(default=0)
+    low_threshold = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class StockMovement(models.Model):
+    item = models.ForeignKey(CanteenItem, on_delete=models.PROTECT, related_name='stock_movements')
+    delta = models.IntegerField()
+    reason = models.CharField(max_length=255)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    source_transaction = models.ForeignKey(
+        'Transaction', on_delete=models.PROTECT, null=True, blank=True, related_name='stock_movements',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class DailyMenu(models.Model):
     MEAL_TYPE_CHOICES = [
         ('breakfast', 'Breakfast'), ('lunch', 'Lunch'), ('dinner', 'Dinner'),

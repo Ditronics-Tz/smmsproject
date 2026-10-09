@@ -136,6 +136,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "smmsapp.tasks.expire_preorders",
         "schedule": crontab(hour=23, minute=30),
     },
+    "check-low-stock": {
+        "task": "smmsapp.tasks.check_low_stock",
+        "schedule": crontab(hour=8, minute=0),
+    },
     "audit-purge": {
         "task": "smmsapp.tasks.audit_purge",
         "schedule": crontab(hour=2, minute=0),  # Daily 02:00
@@ -145,6 +149,7 @@ CELERY_BEAT_SCHEDULE = {
 # Default low-balance threshold (Tsh) used when a parent has no explicit balance_threshold.
 DEFAULT_BALANCE_THRESHOLD = '1000.00'
 MENU_ENFORCED = os.getenv('MENU_ENFORCED', 'False') == 'True'
+STOCK_ENFORCED = os.getenv('STOCK_ENFORCED', 'False') == 'True'
 RFID_BALANCE_FLOOR = os.getenv('RFID_BALANCE_FLOOR', '-500.00')
 PENALTY_FEE = Decimal(os.getenv('PENALTY_FEE', '500.00'))
 STRIKE_LIMIT = int(os.getenv('STRIKE_LIMIT', '10'))

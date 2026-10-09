@@ -149,6 +149,16 @@ def check_balance_thresholds():
 
 
 @shared_task
+def check_low_stock():
+    from .services.features import is_enabled
+    if not is_enabled('STOCK'):
+        logger.info('Skipping low-stock sweep: STOCK is disabled.')
+        return 0
+    from .views.stock import notify_low_stock
+    return notify_low_stock()
+
+
+@shared_task
 def audit_purge():
     from datetime import timedelta
     from django.conf import settings

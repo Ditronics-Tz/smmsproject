@@ -126,6 +126,18 @@ class ScanRFIDCardView(APIView):
                 from ..models import PreOrderItem
                 preorder_item = PreOrderItem.objects.filter(preorder=preorder, item=item, fulfilled_quantity__lt=F('quantity')).first()
                 if preorder_item is not None:
+                    from ..services.features import is_enabled
+                    from ..services.stock import consume_stock
+                    stock_movement = None
+                    if is_enabled('STOCK'):
+                        consumed = consume_stock(item, actor=user, enforce=getattr(settings, 'STOCK_ENFORCED', False))
+                        if consumed is False:
+                            return Response(
+                                {'code': 'OUT_OF_STOCK', 'detail': 'This item is currently out of stock.'},
+                                status=status.HTTP_409_CONFLICT,
+                            )
+                        if isinstance(consumed, StockMovement):
+                            stock_movement = consumed
                     fulfilled = fulfil_preorder_item(preorder, item, actor=user)
                     if fulfilled is not None:
                         transaction_record = Transaction.objects.create(
@@ -134,6 +146,9 @@ class ScanRFIDCardView(APIView):
                             transaction_status='successful', session=session, scan_source=scan_source,
                             preorder_item=fulfilled,
                         )
+                        if stock_movement:
+                            stock_movement.source_transaction = transaction_record
+                            stock_movement.save(update_fields=['source_transaction'])
                         scanned_data = ScannedData.objects.create(
                             session=session, student_or_staff=student_or_staff, rfid_card=rfid_card,
                             item=item, scan_source=scan_source, client_scan_id=client_scan_id,
@@ -169,6 +184,19 @@ class ScanRFIDCardView(APIView):
                     title = f"Your Card Blocked"
                     message = f"Your card is blocked after {settings.STRIKE_LIMIT} insufficient-balance penalties. Please recharge your account to unblock it."
                 return Response({'code': 118, 'message': 'Meal denied. Customer exceeded allowed insufficient meals.'}, status=status.HTTP_403_FORBIDDEN)
+
+            from ..services.features import is_enabled
+            from ..services.stock import consume_stock
+            stock_movement = None
+            if is_enabled('STOCK'):
+                consumed = consume_stock(item, actor=user, enforce=getattr(settings, 'STOCK_ENFORCED', False))
+                if consumed is False:
+                    return Response(
+                        {'code': 'OUT_OF_STOCK', 'detail': 'This item is currently out of stock.'},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                if isinstance(consumed, StockMovement):
+                    stock_movement = consumed
 
             # Deduct balance if sufficient funds
             old_balance = rfid_card.balance  # capture before change
@@ -213,6 +241,9 @@ class ScanRFIDCardView(APIView):
                 session=session,
                 scan_source=scan_source,
             )
+            if stock_movement:
+                stock_movement.source_transaction = transaction_record
+                stock_movement.save(update_fields=['source_transaction'])
 
             # Write ledger entry for the balance change
             from ..models import LedgerEntry

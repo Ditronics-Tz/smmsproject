@@ -27,6 +27,8 @@ Error responses use a `code` (numeric for legacy codes, string for named contrac
 | `DAILY_LIMIT` | The purchase would exceed the student's configured daily spending limit. | 403 |
 | `CHILD_NOT_LINKED` | The requested child is not linked to the authenticated parent. | 403 |
 | `PARENT_REQUIRED` | Only a parent can manage child spending controls. | 403 |
+| `OUT_OF_STOCK` | The item has no remaining inventory while stock enforcement is enabled. | 409 |
+| `STOCK_ADJUSTMENT_NEGATIVE` | The adjustment would make an inventory quantity negative. | 400 |
 | `MENU_ITEM_HAS_PREORDERS` | A menu item cannot be removed while active pre-orders reference that menu. | 409 |
 | `PREORDER_CUTOFF_PASSED` | The Tanzania-local ordering cutoff has passed. | 400 |
 | `PREORDER_NO_MENU` | No menu exists for the requested date and meal. | 400 |

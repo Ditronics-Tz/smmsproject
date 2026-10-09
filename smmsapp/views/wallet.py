@@ -339,6 +339,9 @@ class ReverseTransactionView(APIView):
             txn.is_voided = True
             txn.save()
 
+            from ..services.stock import restore_stock
+            restore_stock(txn.item, transaction_record=txn, actor=request.user, reason=f'Reversal {txn.id}')
+
             # Create the Reversal record (unique constraint => cannot be applied twice)
             try:
                 log_action('reverse', obj=txn, after=snapshot(txn))

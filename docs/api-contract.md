@@ -56,7 +56,7 @@ Feature-gated APIs return HTTP 403 with code `FEATURE_DISABLED` when the databas
 - `PARENT_LIMITS`: parent balance-threshold API and its scheduled low-balance sweep.
 - `NFC_SCAN`: scan requests that supply `card_uid`. Existing USB/RFID requests using `card_number` remain available regardless of this flag. NFC UIDs are normalized to uppercase hexadecimal and matched against `RFIDCard.uid_hex`.
 
-`PREORDER` gates the preorder API and its scan fulfilment path. Sponsorship, integration, and stock flags are available to clients/configuration and included in profiles, but there are no corresponding routes to gate yet. `build_insights` skips work while `INSIGHTS` is disabled. There is no `build_daily_stats` task in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
+`PREORDER` gates the preorder API and its scan fulfilment path. `STOCK` gates stock-management endpoints and the scheduled stock-alert task. Sponsorship and integration flags are available to clients/configuration and included in profiles, but those modules do not yet have corresponding routes. `build_insights` skips work while `INSIGHTS` is disabled. There is no `build_daily_stats` task in this codebase. `check_balance_thresholds` skips work when `PARENT_LIMITS` is disabled; notification delivery, audit cleanup, and export generation are core/background infrastructure and continue independently of feature UI flags.
 
 ## Parent spending controls (BE-90)
 
@@ -76,6 +76,10 @@ At scan time, an item in the child's blocked list returns HTTP 403 `ITEM_BLOCKED
 - `GET /api/v1/menu/today?meal_type=breakfast|lunch|dinner` (operator)
 
 Menu item `price` is the override when present, otherwise the canteen item's current price. `MENU_ENFORCED` defaults off; when enabled, scans must use an item on today's menu for the active session's meal type, and use the menu price.
+
+## Stock control (BE-120)
+
+`GET /api/v1/stock/` lists inventory levels. Admins adjust inventory with `POST /api/v1/stock/adjust` using `{ item_id, delta, reason, low_threshold? }`; negative resulting quantities are rejected. Meal scans decrement tracked stock under a row lock, and transaction reversal restores one unit. `STOCK_ENFORCED` defaults to false; when enabled, a scan against an empty or unconfigured stock level returns HTTP 409 `OUT_OF_STOCK`. Stock endpoints and the daily alert task are gated by `STOCK`.
 
 ## Pre-orders (BE-149–155)
 
