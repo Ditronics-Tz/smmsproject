@@ -2,7 +2,8 @@
 
 A web service for managing student meals, built with Django and PostgreSQL. This system allows students to manage meal plans, view menus, and track their meal usage.
 
-Backend API onboarding: see the [API developer reference](docs/API_DEVELOPER_REFERENCE.md).
+Backend API handoff: see the [complete API reference](docs/API_COMPLETE_REFERENCE.md)
+for endpoint paths, permissions, JSON requests, JSON responses, and client rules.
 
 ## Features
 - User authentication and role-based access (students, admins, staff)
